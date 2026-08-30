@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Threading;
@@ -26,12 +27,15 @@ namespace iWorkHelper.BootstrapperApplication
         private InstallerWindow window;
         private PackageState packageState = PackageState.Unknown;
         private FeatureState excelState = FeatureState.Unknown;
-        private FeatureState outlookState = FeatureState.Unknown;
+        private FeatureState outlookLocalState = FeatureState.Unknown;
+        private FeatureState outlookLocalOnlineState = FeatureState.Unknown;
+        private readonly HashSet<string> overriddenVariables = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private LaunchAction pendingAction;
         private BundleScope pendingScope;
         private bool pendingElevation;
         private LaunchAction requestedAction = LaunchAction.Unknown;
         private bool headless;
+        private int finalStatus;
 
         public InstallerApplication()
         {
@@ -40,21 +44,23 @@ namespace iWorkHelper.BootstrapperApplication
             DetectMsiFeature += (_, e) =>
             {
                 if (e.FeatureId == "ExcelFeature") excelState = e.State;
-                if (e.FeatureId == "OutlookFeature") outlookState = e.State;
+                if (e.FeatureId == "OutlookFeature") outlookLocalState = e.State;
+                if (e.FeatureId == "OutlookLocalOnlineFeature") outlookLocalOnlineState = e.State;
             };
             DetectComplete += OnDetectComplete;
             PlanPackageBegin += OnPlanPackageBegin;
             PlanMsiFeature += OnPlanMsiFeature;
             PlanComplete += OnPlanComplete;
             Progress += (_, e) => Dispatch(() => window?.SetProgress(e.OverallPercentage));
-            ApplyComplete += (_, e) => Dispatch(() => { if (headless) Application.Current.Shutdown(e.Status); else window?.ShowFinished(e.Status >= 0, e.Status); });
+            ApplyComplete += (_, e) => Dispatch(() => { finalStatus = e.Status; if (headless) Application.Current.Shutdown(e.Status); else window?.ShowFinished(e.Status >= 0, e.Status); });
             Error += (_, e) => Dispatch(() => window?.ShowEngineError(e.ErrorMessage, e.ErrorCode));
         }
 
-        private static void ApplyOverridableVariables(IEngine targetEngine, IMbaCommand command)
+        private void ApplyOverridableVariables(IEngine targetEngine, IMbaCommand command)
         {
             foreach (var variable in command.Variables)
             {
+                overriddenVariables.Add(variable.Key);
                 switch (variable.Key)
                 {
                     case "InstallExcel":
@@ -66,6 +72,7 @@ namespace iWorkHelper.BootstrapperApplication
                     case "InstallFolder":
                     case "InstallScope":
                     case "SelectedLanguage":
+                    case "OutlookEdition":
                         targetEngine.SetVariableString(variable.Key, variable.Value, false);
                         break;
                 }
@@ -80,8 +87,8 @@ namespace iWorkHelper.BootstrapperApplication
             app.MainWindow = window;
             engine.CloseSplashScreen();
             if (headless) BeginDetect(); else window.Show();
-            app.Run();
-            engine.Quit(0);
+            var applicationStatus = app.Run();
+            engine.Quit(finalStatus != 0 ? finalStatus : applicationStatus);
         }
 
         public void BeginDetect() => engine.Detect(GetWindowHandle());
@@ -112,9 +119,20 @@ namespace iWorkHelper.BootstrapperApplication
                         : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "iWorkHelper");
                     folderSource = "HeadlessDefault";
                 }
-                engine.Log(LogLevel.Standard, $"iWorkHelper detect: packageState={packageState}, bundleInstalled={ReadNumeric("WixBundleInstalled")}, authoredScope={ReadNumeric("WixBundleAuthoredScope")}, detectedScope={ReadNumeric("WixBundleDetectedScope")}, WixStdBAScope={ReadString("InstallScope")} (custom-BA equivalent), elevated={ReadNumeric("WixBundleElevated")}, requestedAction={requestedAction}, installFolderSource={folderSource}, persistedFolder={persistedFolder}");
+                if (packageState != PackageState.Present)
+                {
+                    if (InstalledProductLocator.IsFeatureInstalled("ExcelFeature")) excelState = FeatureState.Local;
+                    if (InstalledProductLocator.IsFeatureInstalled("OutlookFeature")) outlookLocalState = FeatureState.Local;
+                    if (InstalledProductLocator.IsFeatureInstalled("OutlookLocalOnlineFeature")) outlookLocalOnlineState = FeatureState.Local;
+                }
+                var detectedOutlookEdition = InstalledProductLocator.FindOutlookEdition(ReadScope());
+                engine.Log(LogLevel.Standard, $"iWorkHelper detect: packageState={packageState}, bundleInstalled={ReadNumeric("WixBundleInstalled")}, authoredScope={ReadNumeric("WixBundleAuthoredScope")}, detectedScope={ReadNumeric("WixBundleDetectedScope")}, WixStdBAScope={ReadString("InstallScope")} (custom-BA equivalent), elevated={ReadNumeric("WixBundleElevated")}, requestedAction={requestedAction}, excelFeature={excelState}, outlookLocalFeature={outlookLocalState}, outlookLocalOnlineFeature={outlookLocalOnlineState}, detectedOutlookEdition={detectedOutlookEdition}, installFolderSource={folderSource}, persistedFolder={persistedFolder}");
                 window.LoadPersisted(persistedFolder, ReadScope());
-                window.SetDetectedState(packageState, ReadNumeric("WixBundleInstalled") == 1, excelState, outlookState, ReadEnvironment(), requestedAction);
+                window.SetDetectedState(packageState, ReadNumeric("WixBundleInstalled") == 1, excelState, outlookLocalState, outlookLocalOnlineState, detectedOutlookEdition, ReadEnvironment(), requestedAction);
+                window.ApplyVariableOverrides(
+                    overriddenVariables.Contains("InstallExcel") ? (bool?)(ReadNumeric("InstallExcel") == 1) : null,
+                    overriddenVariables.Contains("InstallOutlook") ? (bool?)(ReadNumeric("InstallOutlook") == 1) : null,
+                    overriddenVariables.Contains("OutlookEdition") ? ReadString("OutlookEdition") : null);
                 if (headless)
                 {
                     engine.Log(LogLevel.Standard, $"iWorkHelper headless lifecycle: uiLevel={ReadNumeric("WixBundleUILevel")}, requestedAction={requestedAction}");
@@ -171,13 +189,14 @@ namespace iWorkHelper.BootstrapperApplication
             engine.SetVariableString("SelectedLanguage", selection.Chinese ? "zh-CN" : "en-US", false);
             engine.SetVariableNumeric("InstallExcel", selection.Excel ? 1 : 0);
             engine.SetVariableNumeric("InstallOutlook", selection.Outlook ? 1 : 0);
+            engine.SetVariableString("OutlookEdition", selection.OutlookLocalOnline ? "LocalOnline" : "Local", false);
             engine.SetVariableNumeric("InstallPerMachine", selection.PerMachine ? 1 : 0);
             engine.SetVariableString("InstallScope", selection.PerMachine ? "PerMachine" : "PerUser", false);
             pendingAction = action;
             pendingScope = selection.PerMachine ? BundleScope.PerMachine : BundleScope.PerUser;
             var directoryWritable = DirectoryPermission.CanWrite(selection.InstallFolder);
             pendingElevation = selection.PerMachine || !directoryWritable;
-            engine.Log(LogLevel.Standard, $"iWorkHelper request: requestedAction={action}, uiScope={pendingScope}, WixStdBAScope={ReadString("InstallScope")} (custom-BA equivalent), authoredScope={ReadNumeric("WixBundleAuthoredScope")}, detectedScope={ReadNumeric("WixBundleDetectedScope")}, folderWritable={directoryWritable}, elevationRequested={pendingElevation}, BurnVariable.InstallFolder={ReadString("InstallFolder")}, MSIProperty.INSTALLFOLDER={selection.InstallFolder}");
+            engine.Log(LogLevel.Standard, $"iWorkHelper request: requestedAction={action}, uiScope={pendingScope}, WixStdBAScope={ReadString("InstallScope")} (custom-BA equivalent), authoredScope={ReadNumeric("WixBundleAuthoredScope")}, detectedScope={ReadNumeric("WixBundleDetectedScope")}, folderWritable={directoryWritable}, elevationRequested={pendingElevation}, installExcel={selection.Excel}, installOutlook={selection.Outlook}, outlookEdition={ReadString("OutlookEdition")}, BurnVariable.InstallFolder={ReadString("InstallFolder")}, MSIProperty.INSTALLFOLDER={selection.InstallFolder}");
             window.ShowProgress();
             engine.Plan(action, pendingScope);
         }
@@ -186,7 +205,9 @@ namespace iWorkHelper.BootstrapperApplication
         {
             if (pendingAction == LaunchAction.Uninstall) return;
             if (e.FeatureId == "ExcelFeature") e.State = window.Selection.Excel ? FeatureState.Local : FeatureState.Absent;
-            if (e.FeatureId == "OutlookFeature") e.State = window.Selection.Outlook ? FeatureState.Local : FeatureState.Absent;
+            if (e.FeatureId == "OutlookFeature") e.State = window.Selection.Outlook && !window.Selection.OutlookLocalOnline ? FeatureState.Local : FeatureState.Absent;
+            if (e.FeatureId == "OutlookLocalOnlineFeature") e.State = window.Selection.Outlook && window.Selection.OutlookLocalOnline ? FeatureState.Local : FeatureState.Absent;
+            engine.Log(LogLevel.Standard, $"iWorkHelper feature plan: feature={e.FeatureId}, state={e.State}, installOutlook={window.Selection.Outlook}, outlookEdition={(window.Selection.OutlookLocalOnline ? "LocalOnline" : "Local")}");
         }
 
         private void OnPlanPackageBegin(object sender, PlanPackageBeginEventArgs e)
@@ -237,6 +258,7 @@ namespace iWorkHelper.BootstrapperApplication
         public bool PerMachine;
         public bool Excel = true;
         public bool Outlook = true;
+        public bool OutlookLocalOnline = true;
         public string InstallFolder;
     }
 
@@ -274,6 +296,9 @@ namespace iWorkHelper.BootstrapperApplication
         [DllImport("msi.dll", CharSet = CharSet.Unicode)]
         private static extern uint MsiGetProductInfo(string productCode, string property, StringBuilder value, ref uint valueLength);
 
+        [DllImport("msi.dll", CharSet = CharSet.Unicode)]
+        private static extern int MsiQueryFeatureState(string productCode, string feature);
+
         public static string FindInstallLocation()
         {
             for (uint index = 0; ; index++)
@@ -285,7 +310,45 @@ namespace iWorkHelper.BootstrapperApplication
                 uint length = 1024;
                 var location = new StringBuilder((int)length);
                 if (MsiGetProductInfo(productCode.ToString(), "InstallLocation", location, ref length) == 0 && location.Length > 0)
-                    return location.ToString();
+                    return location.ToString().TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            }
+            return String.Empty;
+        }
+
+        public static bool IsFeatureInstalled(string featureId)
+        {
+            for (uint index = 0; ; index++)
+            {
+                var productCode = new StringBuilder(39);
+                var result = MsiEnumRelatedProducts(UpgradeCode, 0, index, productCode);
+                if (result == 259) break; // ERROR_NO_MORE_ITEMS
+                if (result != 0) continue;
+                var state = MsiQueryFeatureState(productCode.ToString(), featureId);
+                if (state == 1 || state == 3 || state == 4) return true; // advertised, local, or source
+            }
+            return false;
+        }
+
+        public static string FindOutlookEdition(BundleScope scope)
+        {
+            var hives = scope == BundleScope.PerMachine
+                ? new[] { RegistryHive.LocalMachine, RegistryHive.CurrentUser }
+                : new[] { RegistryHive.CurrentUser, RegistryHive.LocalMachine };
+            foreach (var hive in hives)
+            {
+                try
+                {
+                    using (var baseKey = RegistryKey.OpenBaseKey(hive, RegistryView.Registry64))
+                    using (var key = baseKey.OpenSubKey(@"Software\iWorkHelper\Installer"))
+                    {
+                        var value = key?.GetValue("OutlookEdition") as string;
+                        if (String.Equals(value, "Local", StringComparison.OrdinalIgnoreCase) ||
+                            String.Equals(value, "LocalOnline", StringComparison.OrdinalIgnoreCase))
+                            return value;
+                    }
+                }
+                catch (UnauthorizedAccessException) { }
+                catch (System.Security.SecurityException) { }
             }
             return String.Empty;
         }

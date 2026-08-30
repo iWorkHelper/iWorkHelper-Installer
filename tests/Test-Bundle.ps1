@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$BundlePath = (Join-Path (Split-Path -Parent $PSScriptRoot) 'artifacts\iWorkHelper-Setup-1.0.0-x64.exe'),
+    [string]$BundlePath = (Join-Path (Split-Path -Parent $PSScriptRoot) 'artifacts\iWorkHelper-Setup-1.0.9-x64.exe'),
     [string]$ExpectedVersion,
     [string]$ExpectedProductCode
 )
@@ -34,12 +34,18 @@ if ($manifest.SelectNodes('//@Condition') | Where-Object { $_.Value -match '\bnu
 
 $msiPackage = $manifest.SelectSingleNode('//b:MsiPackage[@Id="iWorkHelperMsi"]', $ns)
 if ($msiPackage.Scope -ne 'perUserOrMachine') { throw 'MSI package scope was not propagated to Burn.' }
+$burnFeatures = @($msiPackage.SelectNodes('b:MsiFeature', $ns) | ForEach-Object { $_.Id })
+foreach ($featureId in @('ExcelFeature', 'OutlookFeature', 'OutlookLocalOnlineFeature')) {
+    if ($burnFeatures -notcontains $featureId) { throw "Burn MSI feature selection is missing: $featureId" }
+}
 if ($ExpectedVersion -and $msiPackage.Version -ne $ExpectedVersion) { throw "Chained MSI version mismatch. Expected $ExpectedVersion, got $($msiPackage.Version)." }
 if ($ExpectedProductCode -and $msiPackage.ProductCode -ne $ExpectedProductCode) { throw "Chained MSI ProductCode mismatch. Expected $ExpectedProductCode, got $($msiPackage.ProductCode)." }
 $transformProperty = $msiPackage.SelectSingleNode('b:MsiProperty[@Id="TRANSFORMS"]', $ns)
 if (-not $transformProperty -or $transformProperty.Condition -ne 'SelectedLanguage = "zh-CN"') { throw 'zh-CN transform selection is invalid.' }
 $folderProperty = $msiPackage.SelectSingleNode('b:MsiProperty[@Id="INSTALLFOLDER"]', $ns)
 if (-not $folderProperty -or $folderProperty.Value -ne '[InstallFolder]') { throw 'Custom install folder is not passed to MSI.' }
+$outlookEditionProperty = $msiPackage.SelectSingleNode('b:MsiProperty[@Id="OUTLOOKEDITION"]', $ns)
+if (-not $outlookEditionProperty -or $outlookEditionProperty.Value -ne '[OutlookEdition]') { throw 'Outlook edition is not passed to MSI.' }
 foreach ($mapping in @{
     IWORKHELPER_REQUESTEDSCOPE='[InstallScope]'
     IWORKHELPER_BUNDLEPLANNEDSCOPE='[WixBundlePlannedScope]'
@@ -57,10 +63,12 @@ $variables = @($manifest.SelectNodes('//b:Variable', $ns))
 $baDataPath = Join-Path $resolvedExtractRoot 'ba\BootstrapperApplicationData.xml'
 [xml]$baData = Get-Content -LiteralPath $baDataPath
 $overridableVariables = @($baData.SelectNodes('//*[local-name()="WixStdbaOverridableVariable"]') | ForEach-Object { $_.Name })
-foreach ($variable in @('InstallFolder', 'SelectedLanguage', 'InstallExcel', 'InstallOutlook', 'InstallPerMachine', 'InstallScope')) {
+foreach ($variable in @('InstallFolder', 'SelectedLanguage', 'InstallExcel', 'InstallOutlook', 'OutlookEdition', 'InstallPerMachine', 'InstallScope')) {
     if (-not ($variables | Where-Object { $_.Id -eq $variable -and $_.Persisted -eq 'yes' })) { throw "Persisted BA variable is missing: $variable" }
     if ($overridableVariables -notcontains $variable) { throw "Overridable BA variable is missing: $variable" }
 }
+$outlookEditionVariable = $variables | Where-Object { $_.Id -eq 'OutlookEdition' }
+if ($outlookEditionVariable.Value -ne 'LocalOnline') { throw 'Fresh Bundle installations must default to Outlook LocalOnline.' }
 
 $manifestRaw = Get-Content -LiteralPath (Join-Path $resolvedExtractRoot 'ba\manifest.xml') -Raw
 foreach ($required in @('OfficePlatform', 'VstoRuntimeVersion32', 'NetFrameworkRelease', 'WindowsCurrentBuild')) {

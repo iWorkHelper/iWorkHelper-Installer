@@ -13,7 +13,7 @@ WiX 7 二进制发行版附带 OSMF EULA/维护费要求。项目所有者确认
 ## 生命周期分工
 
 - Burn EXE：检测 Windows/.NET/Office/VSTO Runtime、阻止缺少 Runtime 的安装、选择安装范围、按需提权、缓存、重启协调、主 MSI 生命周期。
-- MSI：安装插件文件、Excel/Outlook Feature、VSTO 注册、Modify/Repair/Remove 和 MajorUpgrade。
+- MSI：安装插件文件、Excel/Outlook Feature、VSTO 注册、Modify/Repair/Remove 和 MajorUpgrade。Outlook 本地版与本地+网络版是同一 Add-in 的互斥 Feature，不是两个 Outlook 插件身份。
 - Bundle Chain 只包含主 MSI，不包含会迫使普通 per-user 安装提权的 Runtime 包。.NET 4.8 或 VSTO Runtime 缺少时，BA 显示对应 Microsoft 官方页面并阻止当前安装；用户安装 Runtime 后重新运行安装器。
 - MSI 不链接 WixUI/FeatureTree；所有交互和 Feature 规划均由 BA 完成，避免引入不使用的 MSI 内部 UI 和维护入口。
 - Bundle 是唯一可见的 ARP 产品；内部 MSI 设置 `Visible="no"`/`ARPSYSTEMCOMPONENT=1`，保留注册供 Burn、Repair、MajorUpgrade 和 Uninstall 使用。
@@ -26,7 +26,7 @@ Summary Information Word Count 保留压缩源 bit 1，并设置 no-elevation bi
 
 `INSTALLFOLDER` 默认是 `[LocalAppDataFolder]Programs\iWorkHelper`；当规划为 per-machine 时切换到 `[ProgramFiles64Folder]iWorkHelper`。注册根使用 `HKMU`，由 Windows Installer 随范围写入 HKCU 或 HKLM。per-user 执行时 Windows Installer 会把创作时的 `ALLUSERS=2`/`MSIINSTALLPERUSER=1` 归一化为 per-user 上下文；per-machine 则使用 `ALLUSERS=1`。
 
-自定义路径由 BA persisted `InstallFolder` 通过 Bundle `MsiProperty` 映射到 MSI public `INSTALLFOLDER`。Excel/Outlook 的全部文件组件分别挂在其子目录；MSI 设置 `ARPINSTALLLOCATION`，维护和升级优先复用 Burn persisted path，不从路径反推 Scope。
+自定义路径由 BA persisted `InstallFolder` 通过 Bundle `MsiProperty` 映射到 MSI public `INSTALLFOLDER`。Excel、Outlook Local 与 Outlook LocalOnline 的全部文件组件分别挂在 `Excel`、`Outlook\Local` 与 `Outlook\LocalOnline` 子目录；MSI 设置 `ARPINSTALLLOCATION`，维护和升级优先复用 Burn persisted path，不从路径反推 Scope。
 
 Bundle 日志记录 UI scope、WixStdBA 等价 scope、Authored/Detected/Planned Scope、elevation、每个 package 的 plan/cache/execute 边界。MSI verbose log 通过 `IWORKHELPER_*` 诊断属性记录 Burn scope，并在 CostFinalize 后生成 `IWORKHELPER_INSTALLCONTEXT`，明确写出最终 `ALLUSERS`、`MSIINSTALLPERUSER` 和 `INSTALLFOLDER`。development MSI 设置 `MsiLogging=voicewarmupx!`，确保 client-side per-user 首次安装也生成独立 verbose log。这些属性和日志设置只用于诊断，不参与 Scope 决策。
 
@@ -35,8 +35,11 @@ Bundle 日志记录 UI scope、WixStdBA 等价 scope、Authored/Detected/Planned
 ## Feature 隔离
 
 - `ExcelFeature` 只引用 Excel Payload 和 Excel 注册组件。
-- `OutlookFeature` 只引用 Outlook Payload 和 Outlook 注册组件。
-- 两者没有父子关系、共享注册组件或互相引用，因此 Modify/Repair/Remove 的 Feature 状态可独立处理。
+- `OutlookFeature` 表示 Outlook Local，保留原 Feature Id 以便旧版 Upgrade 把既有 Outlook 安装继续识别为本地版。
+- `OutlookLocalOnlineFeature` 表示 Outlook LocalOnline。
+- 两个 Outlook Feature 各自拥有独立文件目录和组件，但写入相同的 `oWorkhelper` Add-in 身份；MSI 在 CostFinalize 后拒绝两者同时请求 Local，BA 在 Plan 时也只规划其中一个。
+- Bundle 的主 `MsiPackage` 必须设置 `EnableFeatureSelection="yes"`；否则 Burn 不触发 `PlanMsiFeature`，三个 Level=1 Feature 会全部按默认状态安装，Outlook 互斥保护会正确阻止事务但用户选择无法生效。
+- Modify 切换版本时旧 Feature 规划为 Absent、新 Feature 规划为 Local；Excel Feature 状态不受影响。Repair 使用检测到的 Feature 状态。Upgrade 通过稳定 Feature Id，并以 HKMU `Software\iWorkHelper\Installer\OutlookEdition` 作为诊断/恢复标记，保留 Local 或 LocalOnline。
 
 ## 检测
 

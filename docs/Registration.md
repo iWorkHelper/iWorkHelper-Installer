@@ -20,7 +20,7 @@ HKCU/HKLM\Software\Microsoft\Office\Outlook\Addins\oWorkhelper
 file:///<installed deployment manifest>.vsto|vstolocal
 ```
 
-`vstolocal` 强制从 MSI 安装目录加载，不写 ClickOnce cache。per-user / per-machine 由 `HKMU` 自动映射到 HKCU/HKLM。组件属于对应 Feature，因此移除 Excel Feature 不会删除 Outlook 注册，反之亦然。
+`vstolocal` 强制从 MSI 安装目录加载，不写 ClickOnce cache。per-user / per-machine 由 `HKMU` 自动映射到 HKCU/HKLM。Outlook Local 和 LocalOnline 各自的注册组件都写入上面同一个 Add-in 键，但 MSI 互斥条件确保任一时刻只安装一个；其 Manifest 分别指向 `Outlook\Local` 或 `Outlook\LocalOnline`。因此 Outlook 中只显示一个 `oWorkHelper`，切换版本会替换 Manifest 和 edition 标记，而不会创建第二个 Add-in 身份。
 
 ## 64 位约束
 
@@ -29,4 +29,3 @@ file:///<installed deployment manifest>.vsto|vstolocal
 ## 清单要求
 
 Release Build 生成的 `.vsto` 引用同目录 `.dll.manifest`，后者列出主程序集与依赖。安装器必须保持文件名和相对关系，且正式清单签名链在目标机可被信任。安装器 Authenticode 签名不能替代 VSTO manifest 签名。
-

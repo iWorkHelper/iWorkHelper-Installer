@@ -19,6 +19,7 @@
     <Property Id="IWORKHELPER_BUNDLEPLANNEDSCOPE" Value="0" Secure="yes" />
     <Property Id="IWORKHELPER_BUNDLEELEVATED" Value="0" Secure="yes" />
     <Property Id="IWORKHELPER_INSTALLCONTEXT" Value="Unknown" Secure="yes" />
+    <Property Id="OUTLOOKEDITION" Value="Local" Secure="yes" />
 
     <CustomAction Id="SetPerUserInstallFolder" Property="INSTALLFOLDER"
                   Value="[LocalAppDataFolder]Programs\iWorkHelper" Execute="firstSequence" />
@@ -30,12 +31,14 @@
                   Value="PerUser; ALLUSERS=[ALLUSERS]; MSIINSTALLPERUSER=[MSIINSTALLPERUSER]; INSTALLFOLDER=[INSTALLFOLDER]" Execute="firstSequence" />
     <CustomAction Id="SetPerMachineDiagnosticContext" Property="IWORKHELPER_INSTALLCONTEXT"
                   Value="PerMachine; ALLUSERS=[ALLUSERS]; MSIINSTALLPERUSER=[MSIINSTALLPERUSER]; INSTALLFOLDER=[INSTALLFOLDER]" Execute="firstSequence" />
+    <CustomAction Id="RejectMultipleOutlookEditions" Error="!(loc.OutlookEditionsMutuallyExclusive)" />
     <InstallUISequence>
       <Custom Action="SetPerUserInstallFolder" Before="CostFinalize" Condition="NOT INSTALLFOLDER AND NOT ALLUSERS=1" />
       <Custom Action="SetPerMachineInstallFolder" Before="CostFinalize" Condition="NOT INSTALLFOLDER AND ALLUSERS=1" />
       <Custom Action="SetArpInstallLocation" After="CostFinalize" />
       <Custom Action="SetPerUserDiagnosticContext" After="SetArpInstallLocation" Condition="NOT ALLUSERS=1" />
       <Custom Action="SetPerMachineDiagnosticContext" After="SetArpInstallLocation" Condition="ALLUSERS=1" />
+      <Custom Action="RejectMultipleOutlookEditions" After="CostFinalize" Condition="(&amp;OutlookFeature=3) AND (&amp;OutlookLocalOnlineFeature=3)" />
     </InstallUISequence>
     <InstallExecuteSequence>
       <Custom Action="SetPerUserInstallFolder" Before="CostFinalize" Condition="NOT INSTALLFOLDER AND NOT ALLUSERS=1" />
@@ -43,6 +46,7 @@
       <Custom Action="SetArpInstallLocation" After="CostFinalize" />
       <Custom Action="SetPerUserDiagnosticContext" After="SetArpInstallLocation" Condition="NOT ALLUSERS=1" />
       <Custom Action="SetPerMachineDiagnosticContext" After="SetArpInstallLocation" Condition="ALLUSERS=1" />
+      <Custom Action="RejectMultipleOutlookEditions" After="CostFinalize" Condition="(&amp;OutlookFeature=3) AND (&amp;OutlookLocalOnlineFeature=3)" />
     </InstallExecuteSequence>
 
     <Property Id="NETFRAMEWORK48FULL">
@@ -79,7 +83,10 @@
     <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="INSTALLFOLDER" Name="iWorkHelper">
         <Directory Id="ExcelFolder" Name="Excel" />
-        <Directory Id="OutlookFolder" Name="Outlook" />
+        <Directory Id="OutlookFolder" Name="Outlook">
+          <Directory Id="OutlookLocalFolder" Name="Local" />
+          <Directory Id="OutlookLocalOnlineFolder" Name="LocalOnline" />
+        </Directory>
       </Directory>
     </StandardDirectory>
 
@@ -88,8 +95,12 @@
       <ComponentRef Id="ExcelRegistration" />
     </Feature>
     <Feature Id="OutlookFeature" Title="!(loc.OutlookFeatureTitle)" Description="!(loc.OutlookFeatureDescription)" Level="1" AllowAbsent="yes">
-      <ComponentGroupRef Id="OutlookPayload" />
-      <ComponentRef Id="OutlookRegistration" />
+      <ComponentGroupRef Id="OutlookLocalPayload" />
+      <ComponentRef Id="OutlookLocalRegistration" />
+    </Feature>
+    <Feature Id="OutlookLocalOnlineFeature" Title="!(loc.OutlookLocalOnlineFeatureTitle)" Description="!(loc.OutlookLocalOnlineFeatureDescription)" Level="1" AllowAbsent="yes">
+      <ComponentGroupRef Id="OutlookLocalOnlinePayload" />
+      <ComponentRef Id="OutlookLocalOnlineRegistration" />
     </Feature>
   </Package>
 </Wix>

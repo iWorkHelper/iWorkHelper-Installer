@@ -1,35 +1,69 @@
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
   <Fragment>
-    <ComponentGroup Id="OutlookPayload" Directory="OutlookFolder">
-      <Component Id="OutlookFiles" Guid="{E7F13E62-62BF-485C-B307-52BB642117EF}" Bitness="always64">
-        <File Id="OutlookDll" Source="$(PayloadRoot)\Outlook\oWorkhelper.dll" KeyPath="yes" />
-        <File Id="OutlookDllManifest" Source="$(PayloadRoot)\Outlook\oWorkhelper.dll.manifest" />
-        <File Id="OutlookVsto" Source="$(PayloadRoot)\Outlook\oWorkhelper.vsto" />
-        <File Source="$(PayloadRoot)\Outlook\Microsoft.Office.Tools.Common.v4.0.Utilities.dll" />
-        <File Source="$(PayloadRoot)\Outlook\Microsoft.Office.Tools.Outlook.v4.0.Utilities.dll" />
-        <File Source="$(PayloadRoot)\Outlook\Microsoft.Bcl.HashCode.dll" />
-        <File Source="$(PayloadRoot)\Outlook\System.Buffers.dll" />
-        <File Source="$(PayloadRoot)\Outlook\System.Memory.dll" />
-        <File Source="$(PayloadRoot)\Outlook\System.Numerics.Vectors.dll" />
-        <File Source="$(PayloadRoot)\Outlook\System.Runtime.CompilerServices.Unsafe.dll" />
-        <File Source="$(PayloadRoot)\Outlook\UglyToad.PdfPig.dll" />
-        <File Source="$(PayloadRoot)\Outlook\UglyToad.PdfPig.Core.dll" />
-        <File Source="$(PayloadRoot)\Outlook\UglyToad.PdfPig.DocumentLayoutAnalysis.dll" />
-        <File Source="$(PayloadRoot)\Outlook\UglyToad.PdfPig.Fonts.dll" />
-        <File Source="$(PayloadRoot)\Outlook\UglyToad.PdfPig.Package.dll" />
-        <File Source="$(PayloadRoot)\Outlook\UglyToad.PdfPig.Tokenization.dll" />
-        <File Source="$(PayloadRoot)\Outlook\UglyToad.PdfPig.Tokens.dll" />
+    <ComponentGroup Id="OutlookLocalPayload" Directory="OutlookLocalFolder">
+      <Component Id="OutlookLocalFiles" Guid="{53F6585C-9533-42A2-9FBF-018E75CB6593}" Bitness="always64">
+        <File Id="OutlookLocalDll" Source="$(PayloadRoot)\OutlookLocal\oWorkhelper.dll" KeyPath="yes" />
+        <File Id="OutlookLocalDllManifest" Source="$(PayloadRoot)\OutlookLocal\oWorkhelper.dll.manifest" />
+        <File Id="OutlookLocalVsto" Source="$(PayloadRoot)\OutlookLocal\oWorkhelper.vsto" />
+        <File Source="$(PayloadRoot)\OutlookLocal\Microsoft.Office.Tools.Common.v4.0.Utilities.dll" />
+        <File Source="$(PayloadRoot)\OutlookLocal\Microsoft.Office.Tools.Outlook.v4.0.Utilities.dll" />
+        <File Source="$(PayloadRoot)\OutlookLocal\Microsoft.Bcl.HashCode.dll" />
+        <File Source="$(PayloadRoot)\OutlookLocal\System.Buffers.dll" />
+        <File Source="$(PayloadRoot)\OutlookLocal\System.Memory.dll" />
+        <File Source="$(PayloadRoot)\OutlookLocal\System.Numerics.Vectors.dll" />
+        <File Source="$(PayloadRoot)\OutlookLocal\System.Runtime.CompilerServices.Unsafe.dll" />
+        <File Source="$(PayloadRoot)\OutlookLocal\UglyToad.PdfPig.dll" />
+        <File Source="$(PayloadRoot)\OutlookLocal\UglyToad.PdfPig.Core.dll" />
+        <File Source="$(PayloadRoot)\OutlookLocal\UglyToad.PdfPig.DocumentLayoutAnalysis.dll" />
+        <File Source="$(PayloadRoot)\OutlookLocal\UglyToad.PdfPig.Fonts.dll" />
+        <File Source="$(PayloadRoot)\OutlookLocal\UglyToad.PdfPig.Package.dll" />
+        <File Source="$(PayloadRoot)\OutlookLocal\UglyToad.PdfPig.Tokenization.dll" />
+        <File Source="$(PayloadRoot)\OutlookLocal\UglyToad.PdfPig.Tokens.dll" />
+      </Component>
+    </ComponentGroup>
+
+    <ComponentGroup Id="OutlookLocalOnlinePayload" Directory="OutlookLocalOnlineFolder">
+      <Component Id="OutlookLocalOnlineFiles" Guid="{F662E6DE-B5BD-4490-899B-C4A51676F131}" Bitness="always64">
+        <File Id="OutlookLocalOnlineDll" Source="$(PayloadRoot)\OutlookLocalOnline\oWorkhelper.dll" KeyPath="yes" />
+        <File Id="OutlookLocalOnlineDllManifest" Source="$(PayloadRoot)\OutlookLocalOnline\oWorkhelper.dll.manifest" />
+        <File Id="OutlookLocalOnlineVsto" Source="$(PayloadRoot)\OutlookLocalOnline\oWorkhelper.vsto" />
+        <File Source="$(PayloadRoot)\OutlookLocalOnline\Microsoft.Office.Tools.Common.v4.0.Utilities.dll" />
+        <File Source="$(PayloadRoot)\OutlookLocalOnline\Microsoft.Office.Tools.Outlook.v4.0.Utilities.dll" />
+        <File Source="$(PayloadRoot)\OutlookLocalOnline\Microsoft.Bcl.HashCode.dll" />
+        <File Source="$(PayloadRoot)\OutlookLocalOnline\System.Buffers.dll" />
+        <File Source="$(PayloadRoot)\OutlookLocalOnline\System.Memory.dll" />
+        <File Source="$(PayloadRoot)\OutlookLocalOnline\System.Numerics.Vectors.dll" />
+        <File Source="$(PayloadRoot)\OutlookLocalOnline\System.Runtime.CompilerServices.Unsafe.dll" />
+        <File Source="$(PayloadRoot)\OutlookLocalOnline\UglyToad.PdfPig.dll" />
+        <File Source="$(PayloadRoot)\OutlookLocalOnline\UglyToad.PdfPig.Core.dll" />
+        <File Source="$(PayloadRoot)\OutlookLocalOnline\UglyToad.PdfPig.DocumentLayoutAnalysis.dll" />
+        <File Source="$(PayloadRoot)\OutlookLocalOnline\UglyToad.PdfPig.Fonts.dll" />
+        <File Source="$(PayloadRoot)\OutlookLocalOnline\UglyToad.PdfPig.Package.dll" />
+        <File Source="$(PayloadRoot)\OutlookLocalOnline\UglyToad.PdfPig.Tokenization.dll" />
+        <File Source="$(PayloadRoot)\OutlookLocalOnline\UglyToad.PdfPig.Tokens.dll" />
       </Component>
     </ComponentGroup>
   </Fragment>
+
   <Fragment>
-    <Component Id="OutlookRegistration" Directory="OutlookFolder" Guid="{E4A7BBF7-ECA9-4211-B1CD-83534F4FC8C9}" Bitness="always64">
+    <Component Id="OutlookLocalRegistration" Directory="OutlookLocalFolder" Guid="{EFCB2A26-84EC-40C9-9562-0B8667C51E3F}" Bitness="always64">
       <RegistryKey Root="HKMU" Key="Software\Microsoft\Office\Outlook\Addins\oWorkhelper">
         <RegistryValue Name="Description" Type="string" Value="!(loc.OutlookAddinDescription)" />
         <RegistryValue Name="FriendlyName" Type="string" Value="oWorkHelper" />
         <RegistryValue Name="LoadBehavior" Type="integer" Value="3" />
-        <RegistryValue Name="Manifest" Type="string" Value="file:///[OutlookFolder]oWorkhelper.vsto|vstolocal" KeyPath="yes" />
+        <RegistryValue Name="Manifest" Type="string" Value="file:///[OutlookLocalFolder]oWorkhelper.vsto|vstolocal" KeyPath="yes" />
       </RegistryKey>
+      <RegistryValue Root="HKMU" Key="Software\iWorkHelper\Installer" Name="OutlookEdition" Type="string" Value="Local" />
+    </Component>
+
+    <Component Id="OutlookLocalOnlineRegistration" Directory="OutlookLocalOnlineFolder" Guid="{AD7B4FB7-BDF2-402E-9923-96C5BC676E6B}" Bitness="always64">
+      <RegistryKey Root="HKMU" Key="Software\Microsoft\Office\Outlook\Addins\oWorkhelper">
+        <RegistryValue Name="Description" Type="string" Value="!(loc.OutlookAddinDescription)" />
+        <RegistryValue Name="FriendlyName" Type="string" Value="oWorkHelper" />
+        <RegistryValue Name="LoadBehavior" Type="integer" Value="3" />
+        <RegistryValue Name="Manifest" Type="string" Value="file:///[OutlookLocalOnlineFolder]oWorkhelper.vsto|vstolocal" KeyPath="yes" />
+      </RegistryKey>
+      <RegistryValue Root="HKMU" Key="Software\iWorkHelper\Installer" Name="OutlookEdition" Type="string" Value="LocalOnline" />
     </Component>
   </Fragment>
 </Wix>

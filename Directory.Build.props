@@ -1,9 +1,9 @@
 <Project>
   <PropertyGroup>
-    <InstallerVersion Condition="'$(InstallerVersion)' == ''">1.0.0</InstallerVersion>
-    <!-- Makes the default 1.0.0 configuration buildable from Visual Studio.
+    <InstallerVersion Condition="'$(InstallerVersion)' == ''">1.0.9</InstallerVersion>
+    <!-- Makes the current release configuration buildable from Visual Studio.
          build.ps1 overrides this value with the same deterministic algorithm for every release version. -->
-    <InstallerProductCode Condition="'$(InstallerProductCode)' == '' and '$(InstallerVersion)' == '1.0.0'">{07BBB05C-6B3E-3875-0567-7D8B391E7918}</InstallerProductCode>
+    <InstallerProductCode Condition="'$(InstallerProductCode)' == '' and '$(InstallerVersion)' == '1.0.9'">{F9EC8225-7E14-1ED9-610A-B43172AF8AE7}</InstallerProductCode>
     <InstallerManufacturer Condition="'$(InstallerManufacturer)' == ''">iWorkHelper</InstallerManufacturer>
     <PayloadRoot Condition="'$(PayloadRoot)' == ''">$(MSBuildThisFileDirectory)Payload</PayloadRoot>
     <ArtifactsRoot Condition="'$(ArtifactsRoot)' == ''">$(MSBuildThisFileDirectory)artifacts</ArtifactsRoot>

@@ -18,17 +18,19 @@ BA 在 Detect 完成后读取 Burn `WixBundleCommandLineAction`（规划后另�
 
 Burn 在 Upgrade 中会以隐藏 UI 启动旧 related bundle 的 `/uninstall`。BA 必须遵守 `WixBundleUILevel`：非完整 UI 时不显示语言/配置窗口，Detect 后直接执行命令 Action 并在 ApplyComplete 后退出，否则升级会被旧版本的首次安装界面阻塞。
 
-Modify 时仅设置 `PlanMsiFeature` 不足以让已安装包执行；BA 同时在 `PlanPackageBegin` 把主 MSI 请求为 `ForcePresent`，否则 Burn 会规划 `execute=None`，UI 看似成功但 Feature 文件不会变化。
+Modify 时仅设置 `PlanMsiFeature` 不足以让已安装包执行；BA 同时在 `PlanPackageBegin` 把主 MSI 请求为 `ForcePresent`，否则 Burn 会规划 `execute=None`，UI 看似成功但 Feature 文件不会变化。Outlook edition 切换由同一次事务把旧版 Feature 设为 Absent、新版设为 Local，避免两个注册组件或 Payload 同时残留。
 
 最终 Plan 日志同时记录 requested/planned action、requested/planned scope、elevation 和路径。
 
 ## 安装路径链路
 
-路径链路固定为：BA 输入框 → persisted Burn `InstallFolder` → Bundle `MsiProperty INSTALLFOLDER=[InstallFolder]` → MSI public property `INSTALLFOLDER` → `ExcelFolder`/`OutlookFolder` → Component/File。
+路径链路固定为：BA 输入框 → persisted Burn `InstallFolder` → Bundle `MsiProperty INSTALLFOLDER=[InstallFolder]` → MSI public property `INSTALLFOLDER` → `ExcelFolder`/`OutlookLocalFolder`/`OutlookLocalOnlineFolder` → Component/File。
 
 `INSTALLFOLDER` 位于 `ProgramFiles64Folder` 下，以符合 Windows Installer 5.0 dual-purpose authoring；Burn 传入绝对自定义路径时会覆盖默认目录解析。MSI 在 CostFinalize 后设置 `ARPINSTALLLOCATION=[INSTALLFOLDER]`，verbose log记录最终目录。
 
 Bundle 持久化 `InstallFolder` 和 `InstallPerMachine`。维护时优先使用 `WixBundleDetectedScope` 和已持久化路径，不重新计算 LocalAppData/Program Files 默认值。MajorUpgrade 的新 Bundle Id 不继承旧 Bundle persisted variables，因此 BA 还通过固定 MSI UpgradeCode 枚举已安装产品并读取 MSI `InstallLocation` 作为升级路径回退。只有首次安装且用户尚未编辑路径时，切换 Scope 才同步切换默认目录。
+
+Outlook 版本同样不能在维护或升级时回落到 UI 默认值。当前 ProductCode 的维护使用 Burn 检测到的 `OutlookFeature` / `OutlookLocalOnlineFeature` 状态；MajorUpgrade 时 Burn 只报告新 ProductCode 的 Feature 为 Absent，因此 BA 通过固定 MSI UpgradeCode 枚举 related product，并调用 `MsiQueryFeatureState` 读取旧 `ExcelFeature`、`OutlookFeature` 和 `OutlookLocalOnlineFeature`。HKMU `Software\iWorkHelper\Installer\OutlookEdition` 记录 `Local` 或 `LocalOnline` 作为诊断与恢复信息。旧安装器只有 `OutlookFeature`，因此升级时明确映射为 Local。
 
 ## 开发测试清理
 

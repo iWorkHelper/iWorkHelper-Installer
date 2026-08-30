@@ -19,7 +19,7 @@ namespace iWorkHelper.BootstrapperApplication
         private readonly Button back = ButtonOf("Back", 90);
         private readonly Button next = ButtonOf("Next", 110);
         private readonly Button cancel = ButtonOf("Cancel", 90);
-        private RadioButton chinese, english, perUser, perMachine;
+        private RadioButton chinese, english, perUser, perMachine, outlookLocal, outlookLocalOnline;
         private CheckBox excel, outlook;
         private TextBox folder;
         private TextBlock environment, message;
@@ -40,7 +40,8 @@ namespace iWorkHelper.BootstrapperApplication
             ["Chinese"] = new[]{"简体中文", "Simplified Chinese"}, ["English"] = new[]{"English", "English"},
             ["ConfigTitle"] = new[]{"安装配置", "Installation settings"}, ["Scope"] = new[]{"安装范围", "Install for"},
             ["PerUser"] = new[]{"仅当前用户", "Current user only"}, ["PerMachine"] = new[]{"所有用户", "All users"},
-            ["Features"] = new[]{"安装的插件", "Add-ins to install"}, ["Excel"] = new[]{"Excel 插件", "Excel add-in"}, ["Outlook"] = new[]{"Outlook 插件", "Outlook add-in"},
+            ["Features"] = new[]{"安装的插件", "Add-ins to install"}, ["Excel"] = new[]{"Excel 插件", "Excel Add-in"}, ["Outlook"] = new[]{"Outlook 插件", "Outlook Add-in"},
+            ["OutlookLocal"] = new[]{"本地版", "Local"}, ["OutlookLocalOnline"] = new[]{"本地 + 网络版", "Local + Online"},
             ["Folder"] = new[]{"安装路径", "Install location"}, ["Browse"] = new[]{"浏览…", "Browse…"}, ["Environment"] = new[]{"环境检测", "System checks"},
             ["Checking"] = new[]{"正在检测安装环境…", "Checking system requirements…"},
             ["ConfirmTitle"] = new[]{"确认安装", "Ready to install"}, ["Confirm"] = new[]{"请确认以下设置，然后开始安装。", "Review these settings, then start installation."},
@@ -59,7 +60,7 @@ namespace iWorkHelper.BootstrapperApplication
         public InstallerWindow(InstallerApplication ba)
         {
             this.ba = ba;
-            Title = "iWorkHelper Setup"; Width = 720; Height = 570; MinWidth = 650; MinHeight = 520; WindowStartupLocation = WindowStartupLocation.CenterScreen;
+            Title = "iWorkHelper Setup"; Width = 720; Height = 630; MinWidth = 650; MinHeight = 580; WindowStartupLocation = WindowStartupLocation.CenterScreen;
             root.Children.Add(title); root.Children.Add(content); root.Children.Add(buttons); buttons.VerticalAlignment = VerticalAlignment.Bottom;
             buttons.Children.Add(back); buttons.Children.Add(next); buttons.Children.Add(cancel); Content = root;
             back.Margin = next.Margin = cancel.Margin = new Thickness(6, 0, 0, 0);
@@ -105,7 +106,13 @@ namespace iWorkHelper.BootstrapperApplication
             perUser = new RadioButton { Content = T("PerUser"), IsChecked = !Selection.PerMachine, Margin = new Thickness(0, 5, 0, 4) };
             perMachine = new RadioButton { Content = T("PerMachine"), IsChecked = Selection.PerMachine, Margin = new Thickness(0, 2, 0, 14) };
             perUser.Checked += (_, __) => SetDefaultFolder(false); perMachine.Checked += (_, __) => SetDefaultFolder(true); panel.Children.Add(perUser); panel.Children.Add(perMachine);
-            panel.Children.Add(Label(T("Features"))); excel = new CheckBox { Content = T("Excel"), IsChecked = Selection.Excel, Margin = new Thickness(0, 5, 0, 4) }; outlook = new CheckBox { Content = T("Outlook"), IsChecked = Selection.Outlook, Margin = new Thickness(0, 2, 0, 14) }; panel.Children.Add(excel); panel.Children.Add(outlook);
+            panel.Children.Add(Label(T("Features"))); excel = new CheckBox { Content = T("Excel"), IsChecked = Selection.Excel, Margin = new Thickness(0, 5, 0, 4) }; outlook = new CheckBox { Content = T("Outlook"), IsChecked = Selection.Outlook, Margin = new Thickness(0, 2, 0, 4) }; panel.Children.Add(excel); panel.Children.Add(outlook);
+            var outlookEditions = new StackPanel { Margin = new Thickness(24, 0, 0, 12) };
+            outlookLocal = new RadioButton { Content = T("OutlookLocal"), IsChecked = !Selection.OutlookLocalOnline, IsEnabled = Selection.Outlook, Margin = new Thickness(0, 2, 0, 3) };
+            outlookLocalOnline = new RadioButton { Content = T("OutlookLocalOnline"), IsChecked = Selection.OutlookLocalOnline, IsEnabled = Selection.Outlook, Margin = new Thickness(0, 2, 0, 3) };
+            outlook.Checked += (_, __) => SetOutlookEditionEnabled(true);
+            outlook.Unchecked += (_, __) => SetOutlookEditionEnabled(false);
+            outlookEditions.Children.Add(outlookLocal); outlookEditions.Children.Add(outlookLocalOnline); panel.Children.Add(outlookEditions);
             panel.Children.Add(Label(T("Folder"))); var row = new DockPanel(); var browse = ButtonOf(T("Browse"), 92); browse.Click += (_, __) => Browse(); DockPanel.SetDock(browse, Dock.Right); folder = new TextBox { Height = 28, Margin = new Thickness(0, 4, 8, 10) }; row.Children.Add(browse); row.Children.Add(folder); panel.Children.Add(row);
             panel.Children.Add(Label(T("Environment"))); environment = new TextBlock { Text = T("Checking"), Margin = new Thickness(0, 5, 0, 0), TextWrapping = TextWrapping.Wrap }; panel.Children.Add(environment);
             message = new TextBlock { Margin = new Thickness(0, 8, 0, 0), Foreground = System.Windows.Media.Brushes.Firebrick, TextWrapping = TextWrapping.Wrap }; panel.Children.Add(message);
@@ -134,12 +141,18 @@ namespace iWorkHelper.BootstrapperApplication
             }
         }
 
-        private void SaveSelection() { Selection.PerMachine = perMachine.IsChecked == true; Selection.Excel = excel.IsChecked == true; Selection.Outlook = outlook.IsChecked == true; Selection.InstallFolder = Path.GetFullPath(folder.Text.Trim()); }
+        private void SetOutlookEditionEnabled(bool enabled)
+        {
+            if (outlookLocal != null) outlookLocal.IsEnabled = enabled;
+            if (outlookLocalOnline != null) outlookLocalOnline.IsEnabled = enabled;
+        }
+
+        private void SaveSelection() { Selection.PerMachine = perMachine.IsChecked == true; Selection.Excel = excel.IsChecked == true; Selection.Outlook = outlook.IsChecked == true; Selection.OutlookLocalOnline = outlookLocalOnline.IsChecked == true; Selection.InstallFolder = Path.GetFullPath(folder.Text.Trim()); }
         private void ShowConfirm(LaunchAction action)
         {
             selectedAction = action; page = 2; title.Text = T("ConfirmTitle"); var panel = Vertical(); panel.Children.Add(Label(T("Confirm")));
             panel.Children.Add(Label("\n" + T("Scope") + ": " + (Selection.PerMachine ? T("PerMachine") : T("PerUser"))));
-            panel.Children.Add(Label(T("Features") + ": " + String.Join(", ", new[]{ Selection.Excel ? T("Excel") : null, Selection.Outlook ? T("Outlook") : null }).Trim(' ', ',')));
+            panel.Children.Add(Label(T("Features") + ": " + String.Join(", ", new[]{ Selection.Excel ? T("Excel") : null, Selection.Outlook ? T("Outlook") + " - " + (Selection.OutlookLocalOnline ? T("OutlookLocalOnline") : T("OutlookLocal")) : null }).Trim(' ', ',')));
             panel.Children.Add(Label(T("Folder") + ": " + Selection.InstallFolder)); content.Content = panel;
             next.Content = action == LaunchAction.Uninstall ? T("Remove") : action == LaunchAction.Repair ? T("Repair") : action == LaunchAction.Modify ? T("Modify") : T("Install");
         }
@@ -152,11 +165,24 @@ namespace iWorkHelper.BootstrapperApplication
         private void SetMessage(string text) { if (message != null) message.Text = text; }
         private void ShowPage(int value) { if (value <= 0) ShowLanguage(); else ShowConfiguration(); }
 
-        public void SetDetectedState(PackageState state, bool bundleInstalled, FeatureState excelState, FeatureState outlookState, EnvironmentStatus status, LaunchAction requestedAction)
+        public void SetDetectedState(PackageState state, bool bundleInstalled, FeatureState excelState, FeatureState outlookLocalState, FeatureState outlookLocalOnlineState, string detectedOutlookEdition, EnvironmentStatus status, LaunchAction requestedAction)
         {
-            packageState = bundleInstalled ? PackageState.Present : state; environmentStatus = status; detected = true; Selection.Excel = excelState != FeatureState.Absent; Selection.Outlook = outlookState != FeatureState.Absent;
-            if (state != PackageState.Present && excelState == FeatureState.Unknown && outlookState == FeatureState.Unknown) Selection.Excel = Selection.Outlook = true;
-            if (page == 1) { excel.IsChecked = Selection.Excel; outlook.IsChecked = Selection.Outlook; RenderEnvironment(); }
+            packageState = bundleInstalled ? PackageState.Present : state; environmentStatus = status; detected = true;
+            var localInstalled = IsFeatureInstalled(outlookLocalState);
+            var localOnlineInstalled = IsFeatureInstalled(outlookLocalOnlineState);
+            Selection.Excel = IsFeatureInstalled(excelState);
+            Selection.Outlook = localInstalled || localOnlineInstalled;
+            if (localOnlineInstalled) Selection.OutlookLocalOnline = true;
+            else if (localInstalled) Selection.OutlookLocalOnline = false;
+            else if (String.Equals(detectedOutlookEdition, "LocalOnline", StringComparison.OrdinalIgnoreCase)) Selection.OutlookLocalOnline = true;
+            else if (String.Equals(detectedOutlookEdition, "Local", StringComparison.OrdinalIgnoreCase)) Selection.OutlookLocalOnline = false;
+            if (!Selection.Outlook && (String.Equals(detectedOutlookEdition, "Local", StringComparison.OrdinalIgnoreCase) || String.Equals(detectedOutlookEdition, "LocalOnline", StringComparison.OrdinalIgnoreCase))) Selection.Outlook = true;
+            if (state != PackageState.Present && !IsFeatureInstalled(excelState) && !localInstalled && !localOnlineInstalled && String.IsNullOrWhiteSpace(detectedOutlookEdition))
+            {
+                Selection.Excel = Selection.Outlook = true;
+                Selection.OutlookLocalOnline = true;
+            }
+            if (page == 1) { excel.IsChecked = Selection.Excel; outlook.IsChecked = Selection.Outlook; outlookLocal.IsChecked = !Selection.OutlookLocalOnline; outlookLocalOnline.IsChecked = Selection.OutlookLocalOnline; SetOutlookEditionEnabled(Selection.Outlook); RenderEnvironment(); }
             if (page == 1) RenderMaintenance();
             if (page == 1 && (requestedAction == LaunchAction.Uninstall || requestedAction == LaunchAction.UnsafeUninstall))
             {
@@ -167,6 +193,24 @@ namespace iWorkHelper.BootstrapperApplication
                 SaveSelection(); ShowConfirm(LaunchAction.Repair);
             }
         }
+
+        public void ApplyVariableOverrides(bool? installExcel, bool? installOutlook, string outlookEdition)
+        {
+            if (installExcel.HasValue) Selection.Excel = installExcel.Value;
+            if (installOutlook.HasValue) Selection.Outlook = installOutlook.Value;
+            if (String.Equals(outlookEdition, "LocalOnline", StringComparison.OrdinalIgnoreCase)) Selection.OutlookLocalOnline = true;
+            else if (String.Equals(outlookEdition, "Local", StringComparison.OrdinalIgnoreCase)) Selection.OutlookLocalOnline = false;
+            if (page == 1)
+            {
+                excel.IsChecked = Selection.Excel;
+                outlook.IsChecked = Selection.Outlook;
+                outlookLocal.IsChecked = !Selection.OutlookLocalOnline;
+                outlookLocalOnline.IsChecked = Selection.OutlookLocalOnline;
+                SetOutlookEditionEnabled(Selection.Outlook);
+            }
+        }
+
+        private static bool IsFeatureInstalled(FeatureState state) => state != FeatureState.Absent && state != FeatureState.Unknown;
 
         public void LoadPersisted(string installFolder, BundleScope scope)
         {

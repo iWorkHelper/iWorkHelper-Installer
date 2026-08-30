@@ -1,9 +1,7 @@
 [CmdletBinding()]
 param(
     [ValidatePattern('^\d+\.\d+\.\d+$')]
-    [string]$Version = '1.0.0',
-    [ValidateSet('Release-Intranet', 'Release-Internet')]
-    [string]$OutlookConfiguration = 'Release-Intranet',
+    [string]$Version = '1.0.9',
     [string]$ManifestCertificateThumbprint,
     [switch]$SkipAddinBuild,
     [switch]$SkipInstallerBuild
@@ -31,11 +29,13 @@ if (-not $SkipAddinBuild) {
     & $msbuild (Join-Path $workspaceRoot 'eWorkHelper\eWorkhelper.sln') /restore /t:Build /p:Configuration=Release "/p:Platform=Any CPU" "/p:ManifestCertificateThumbprint=$ManifestCertificateThumbprint" /p:ManifestKeyFile=
     if ($LASTEXITCODE -ne 0) { throw 'eWorkHelper Release build failed.' }
 
-    & $msbuild (Join-Path $workspaceRoot 'oWorkHelper\oWorkhelper.sln') /restore /t:Build "/p:Configuration=$OutlookConfiguration" "/p:Platform=Any CPU" "/p:ManifestCertificateThumbprint=$ManifestCertificateThumbprint" /p:ManifestKeyFile=
-    if ($LASTEXITCODE -ne 0) { throw 'oWorkHelper Release build failed.' }
+    foreach ($outlookConfiguration in @('Release-Intranet', 'Release-Internet')) {
+        & $msbuild (Join-Path $workspaceRoot 'oWorkHelper\oWorkhelper.sln') /restore /t:Build "/p:Configuration=$outlookConfiguration" "/p:Platform=Any CPU" "/p:ManifestCertificateThumbprint=$ManifestCertificateThumbprint" /p:ManifestKeyFile=
+        if ($LASTEXITCODE -ne 0) { throw "oWorkHelper $outlookConfiguration build failed." }
+    }
 }
 
-& (Join-Path $installerRoot 'scripts\Collect-Payload.ps1') -OutlookConfiguration $OutlookConfiguration
+& (Join-Path $installerRoot 'scripts\Collect-Payload.ps1')
 & (Join-Path $installerRoot 'tests\Test-InstallerSources.ps1')
 
 if ($SkipInstallerBuild) {

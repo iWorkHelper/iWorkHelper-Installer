@@ -2,11 +2,13 @@
 
 iWorkHelper Installer 是面向 Windows x64 的统一安装器源码，为 eWorkHelper（Excel VSTO）与 oWorkHelper（Outlook VSTO）提供单一 EXE 入口、可选功能、双安装范围和中英文界面。
 
+当前安装器版本为 `1.0.9`。它封装 eWorkHelper `1.1.260822.6` 与 oWorkHelper `1.2.260822.3`；两个加载项保留各自独立的版本规则。
+
 ## 主要功能
 
 - 使用 WiX Toolset 构建统一 Burn Bundle 与 MSI。
 - 支持按当前用户或所有用户安装。
-- 支持独立选择 Excel、Outlook 或两个加载项。
+- 支持独立选择 Excel、Outlook 或两个加载项；Outlook 可互斥选择本地版或本地 + 网络版。
 - 支持简体中文与英文安装界面。
 - 检测 Windows、Office x64、.NET Framework 4.8 和 VSTO Runtime 前置条件。
 - 支持安装、修改、修复、卸载与主版本升级流程。
@@ -30,6 +32,12 @@ dotnet restore .\iWorkHelper-Installer.slnx
 ```
 
 构建脚本负责收集精确 Payload、构建本地化 MSI 和 Bundle，并执行适用的静态验证。可用参数、输出位置和证书要求见 [构建文档](docs/Build.md)。
+
+## 安装与使用
+
+从 [GitHub Releases](https://github.com/iWorkHelper/iWorkHelper-Installer/releases) 下载 `iWorkHelper-Setup-1.0.9-x64.exe`。关闭 Excel 和 Outlook 后运行安装器，选择当前用户或所有用户安装，再按需选择 Excel、Outlook Local 或 Outlook Local + Online。安装后可从 Windows“已安装的应用”中修改、修复或卸载。
+
+安装器不会自动下载 .NET Framework 4.8 或 VSTO Runtime；环境检查未通过时会提供 Microsoft 官方页面入口。
 
 ## 测试
 
@@ -62,4 +70,4 @@ docs/                     架构、构建、测试和维护文档
 
 ## License
 
-当前仓库未包含独立 License 文件。提交或公开发布前，应确认其许可证与两个加载项项目及发布策略一致。
+本项目采用 [MIT License](LICENSE)。

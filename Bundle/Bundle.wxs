@@ -16,6 +16,7 @@
     <Variable Name="SelectedLanguage" Type="string" Value="zh-CN" Persisted="yes" bal:Overridable="yes" />
     <Variable Name="InstallExcel" Type="numeric" Value="1" Persisted="yes" bal:Overridable="yes" />
     <Variable Name="InstallOutlook" Type="numeric" Value="1" Persisted="yes" bal:Overridable="yes" />
+    <Variable Name="OutlookEdition" Type="string" Value="LocalOnline" Persisted="yes" bal:Overridable="yes" />
     <Variable Name="InstallPerMachine" Type="numeric" Value="0" Persisted="yes" bal:Overridable="yes" />
     <!-- WixStdBAScope belongs to WixStdBA. This custom BA passes BundleScope to
          Plan and keeps an equivalent diagnostic variable instead. -->
@@ -34,9 +35,11 @@
                   SourceFile="$(ArtifactsRoot)\iWorkHelper.msi"
                   Visible="no"
                   Vital="yes"
+                  EnableFeatureSelection="yes"
                   bal:PrimaryPackageType="x64">
         <Payload SourceFile="$(ArtifactsRoot)\iWorkHelper.zh-CN.mst" Name="iWorkHelper.zh-CN.mst" />
         <MsiProperty Name="INSTALLFOLDER" Value="[InstallFolder]" />
+        <MsiProperty Name="OUTLOOKEDITION" Value="[OutlookEdition]" />
         <MsiProperty Name="IWORKHELPER_REQUESTEDSCOPE" Value="[InstallScope]" />
         <MsiProperty Name="IWORKHELPER_BUNDLEPLANNEDSCOPE" Value="[WixBundlePlannedScope]" />
         <MsiProperty Name="IWORKHELPER_BUNDLEELEVATED" Value="[WixBundleElevated]" />

@@ -9,8 +9,11 @@
   <String Id="RequiresOffice64" Value="iWorkHelper 需要 64 位 Microsoft Office 2016 或更高版本。" />
   <String Id="ExcelFeatureTitle" Value="Excel 插件" />
   <String Id="ExcelFeatureDescription" Value="为 Microsoft Excel 安装 eWorkHelper。" />
-  <String Id="OutlookFeatureTitle" Value="Outlook 插件" />
-  <String Id="OutlookFeatureDescription" Value="为 Microsoft Outlook 安装 oWorkHelper。" />
+  <String Id="OutlookFeatureTitle" Value="Outlook 插件 - 本地版" />
+  <String Id="OutlookFeatureDescription" Value="安装仅使用本地 OCR 的 oWorkHelper。" />
+  <String Id="OutlookLocalOnlineFeatureTitle" Value="Outlook 插件 - 本地 + 网络版" />
+  <String Id="OutlookLocalOnlineFeatureDescription" Value="安装同时支持本地 OCR 与网络 OCR 的 oWorkHelper。" />
+  <String Id="OutlookEditionsMutuallyExclusive" Value="Outlook 插件的本地版和本地 + 网络版不能同时安装。" />
   <String Id="ExcelAddinDescription" Value="iWorkHelper Excel 工具" />
   <String Id="OutlookAddinDescription" Value="iWorkHelper Outlook 工具" />
 </WixLocalization>

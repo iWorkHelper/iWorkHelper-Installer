@@ -12,10 +12,10 @@
 
 - 2026-08-30 已验证 `dotnet restore iWorkHelper-Installer.slnx`、BA Release、MSI Release、Bundle Release 与 `Release|x64` Solution Rebuild；均为 0 警告、0 错误。Solution Rebuild 确认三个项目均实际参与生成，而非仅加载 `.slnx` 或只构建 BA。
 - 当前 VS 2022 17.14 实例已安装 `.NET 桌面开发`、`Office/SharePoint 开发` 和 .NET Framework 4.8 targeting pack/SDK，但未发现 HeatWave/WiX VSIX；因此源码/CLI 构建已通过，IDE 加载仍须人工安装 HeatWave 后验证。
-- 两个 VSTO Release Build 均为 0 警告、0 错误，deployment/application manifests 使用本机开发自签名证书。
+- Excel Release、Outlook `Release-Intranet` 与 `Release-Internet` 三次 VSTO Build 均为 0 警告、0 错误，deployment/application manifests 使用本机开发自签名证书。
 - MSI 和 Bundle 均为 0 警告、0 错误构建。
 - MSI ICE 验证通过。
-- 数据库验证确认两个顶级 Feature 无共享组件、`ALLUSERS=2`/`MSIINSTALLPERUSER=1` 双作用域、`MSIDEPLOYMENTCOMPLIANT=1`、Windows Installer 5.0、可重定向的 `ProgramFiles64Folder`、Summary Word Count=`10`（压缩源 + per-user 不提权）、HKMU 注册、LaunchCondition 和中文 MST。
+- 数据库验证确认三个顶级 Feature 无共享组件、Outlook 两版有 type-19 互斥保护、`ALLUSERS=2`/`MSIINSTALLPERUSER=1` 双作用域、`MSIDEPLOYMENTCOMPLIANT=1`、Windows Installer 5.0、可重定向的 `ProgramFiles64Folder`、Summary Word Count=`10`（压缩源 + per-user 不提权）、HKMU 注册、LaunchCondition 和中文 MST。
 - Bundle 解包验证确认 scope 为 `perUserOrMachine`、Chain 只有主 MSI且没有任何 Runtime/ExePackage、中文 transform 条件正确。
 - Bundle 解包验证确认自定义 BA 及依赖、持久化 UI 变量、`INSTALLFOLDER` 传递和中文 MST 全部内嵌。
 - 开发自动化可用 Burn `Variable=Value` 语法覆盖 scope、路径、语言和 Feature；变量同时保持 persisted，正式 UI 与无人值守测试走同一条 Plan/MsiProperty 链路。
@@ -25,6 +25,22 @@
 - Windows UI Automation 已真实验证：首屏为语言选择、简体中文默认选中；切换 English 后配置页及 Scope/Feature 文案为英文；切换 All users 后默认路径变为 Program Files。
 - 实际启动最终 EXE 并停留在检测/UI 阶段：.NET Release、Windows x64/Build、Office x64、VSTO Runtime 条件均求值为 true，Burn `Detect complete` 返回成功；未执行 Apply，不计为安装通过。
 - 已针对 WiX 7 运行时条件语法加入回归检查，Bundle 条件中禁止旧式 `numeric Variable` 前缀。
+
+### 1.0.8 Outlook edition 真实验证
+
+最终 development build 使用 `Release-Intranet` → `Payload/OutlookLocal` 和 `Release-Internet` → `Payload/OutlookLocalOnline`；两次 VSTO Build、MSI、Bundle、ICE、数据库、Bundle 解包均为 0 错误，两个 Outlook Payload 各 17 个文件且主 DLL 哈希不同。
+
+在中等完整性 per-user 上已真实完成：
+
+- Outlook Local only、Outlook LocalOnline only、Excel only、Excel + Local、Excel + LocalOnline；实际目录只存在选中 edition，主 DLL 哈希与对应 Payload 一致。
+- Modify Local → LocalOnline、LocalOnline → Local、删除 Outlook、新增 Outlook；每次返回 0，旧 edition 目录与标记清除，Excel 状态不受影响。
+- Repair 后 edition 保持不变；Remove 后文件、HKCU Add-in 键、edition 标记及产品注册清除。
+- Windows Installer Feature state 核对为选中 edition=`Local(3)`、未选 edition=`Absent(2)`；Outlook Add-in 注册键始终只有一个，Manifest 指向当前 edition 子目录。
+- 直接 MSI 同时请求 `OutlookFeature,OutlookLocalOnlineFeature` 返回 1603，日志显示 `RejectMultipleOutlookEditions` 返回 3，事务未提交。
+- 先装 1.0.6 LocalOnline/1.0.7 Local，再静默升级到 1.0.8；两次均保留原 edition。升级日志确认 BA 用 related MSI Feature state 恢复选择，并传入相应 `ADDLOCAL`。
+- 1.0.8 UI Automation 确认首屏默认简体中文；中文与英文配置页分别显示“本地版 / 本地 + 网络版”和 `Local / Local + Online`。1.0.9 起首次安装默认选中 Excel、Outlook 与 LocalOnline；取消 Outlook 后两个单选项禁用但 edition 选择仍保留。维护/升级继续使用检测到的 Feature 状态，不套用首次安装默认值。
+
+脱敏测试结论记录在本文；原始开发日志位于被忽略的 `.local/logs/outlook-editions-1.0.8/` 与 `.local/logs/outlook-editions-upgrade/`，不得提交或发布。
 
 1.0.3 的最终 MSI 没有设置 Summary Word Count bit 3。真实用户操作中 Burn 虽已正确规划 PerUser，Windows Installer 仍在 MSI 初始化前自行发起 UAC；拒绝后返回 `0x80070642`，且来不及创建 package verbose log。1.0.4 将 Word Count 从 `2` 修正为 `10` 并加入数据库断言。语言 MST 改写 ProductCode 的旧问题也已固定并有回归检查。
 
@@ -82,13 +98,13 @@
 
 安装前先运行 `scripts/Clear-DevelopmentInstall.ps1` dry-run，核对精确 Bundle/MSI 标识；仅在开发测试环境确认后使用 `-Execute`。安装后记录 Bundle 与隐藏 MSI 的 DisplayName、版本、卸载命令、Id 和 Scope，确认 ARP 只显示 Bundle。
 
-1. Excel only、Outlook only、Excel + Outlook。
+1. Excel only、Outlook Local only、Outlook LocalOnline only、Excel + Outlook Local、Excel + Outlook LocalOnline。
 2. per-user：文件在 LocalAppData，注册在 HKCU，不影响另一用户。
 3. per-machine：触发提权，文件在 Program Files x64，注册在 HKLM，多用户可见。
-4. Modify：逐一添加/移除 Feature，确认另一 Feature 文件与注册不变。
-5. Repair：删除一个受控文件后修复，确认恢复且 Feature 状态不变。
+4. Modify：新增/删除 Outlook、Local → LocalOnline、LocalOnline → Local；确认旧 edition 目录和专属依赖清除、Excel 不变、Add-in 注册始终只有一个。
+5. Repair：删除一个受控文件后修复，确认恢复且 Outlook edition 状态不变。
 6. Remove：文件、注册与 ARP 项清理；外部 .NET/VSTO Runtime 保留。
-7. Upgrade：先装旧版本及三种 Feature 组合，再装新版本，确认没有并存产品、Feature 状态符合预期、用户配置保留。
+7. Upgrade：先分别安装 Local 与 LocalOnline，再装新版本，确认没有并存产品、Outlook edition 不变；旧的单 Outlook Feature 版本升级时映射为 Local。
 8. 在 zh-CN 与 en-US 系统/命令行语言下检查 Bundle 和 MSI UI。
 9. 缺少 .NET 或 VSTO Runtime 时必须阻止安装、显示中英文说明和对应 Microsoft 官方页面入口，不得自动下载、安装或因此触发 UAC。
 10. 分别在 Windows x86/ARM64、Office x86、无 Office、Office 版本不支持的机器验证阻止消息。
@@ -96,3 +112,5 @@
 动态提权必须在隔离 VM 中验证：per-user 默认目录无 UAC；per-machine 有 UAC；per-user 指向受保护目录时有 UAC；可写自定义目录无 UAC；拒绝 UAC 后回到配置页且路径不变。静态调用检查或目录写入探测不能替代真实 UAC 测试。
 
 Excel 和 Outlook 必须完全退出后执行安装维护。Outlook 还要检查 Resiliency/禁用项是否影响加载，不能把 Office 自行禁用误判成注册失败。
+
+Outlook 互斥还需做直接 MSI 负向测试：同时请求 `OutlookFeature` 和 `OutlookLocalOnlineFeature` 必须在 CostFinalize 后失败且不提交任何文件或注册。安装后应比较主 DLL 与对应 Payload 哈希，并确认未选 edition 的目录不存在。

@@ -46,8 +46,8 @@ if (($wordCount -band 2) -eq 0) { throw "Embedded-cab MSI must retain the compre
 [Runtime.InteropServices.Marshal]::FinalReleaseComObject($summary) | Out-Null
 
 $features = Get-MsiRows $database 'SELECT `Feature`, `Feature_Parent`, `Title`, `Level` FROM `Feature`' 4
-Assert-Equal $features.Count 2 'MSI must contain exactly two top-level features.'
-foreach ($id in @('ExcelFeature', 'OutlookFeature')) {
+Assert-Equal $features.Count 3 'MSI must contain exactly three top-level features.'
+foreach ($id in @('ExcelFeature', 'OutlookFeature', 'OutlookLocalOnlineFeature')) {
     $feature = $features | Where-Object { $_.Values[0] -eq $id }
     if (-not $feature) { throw "Feature is missing: $id" }
     if ($feature.Values[1]) { throw "Feature must be top-level: $id" }
@@ -55,9 +55,16 @@ foreach ($id in @('ExcelFeature', 'OutlookFeature')) {
 
 $featureComponents = Get-MsiRows $database 'SELECT `Feature_`, `Component_` FROM `FeatureComponents`' 2
 $excelComponents = @($featureComponents | Where-Object { $_.Values[0] -eq 'ExcelFeature' } | ForEach-Object { $_.Values[1] })
-$outlookComponents = @($featureComponents | Where-Object { $_.Values[0] -eq 'OutlookFeature' } | ForEach-Object { $_.Values[1] })
-$overlap = @($excelComponents | Where-Object { $outlookComponents -contains $_ })
-if ($overlap.Count -ne 0) { throw "Excel and Outlook share components: $($overlap -join ', ')" }
+$outlookLocalComponents = @($featureComponents | Where-Object { $_.Values[0] -eq 'OutlookFeature' } | ForEach-Object { $_.Values[1] })
+$outlookLocalOnlineComponents = @($featureComponents | Where-Object { $_.Values[0] -eq 'OutlookLocalOnlineFeature' } | ForEach-Object { $_.Values[1] })
+foreach ($pair in @(
+    @{ Left=$excelComponents; Right=$outlookLocalComponents; Name='Excel and Outlook Local' },
+    @{ Left=$excelComponents; Right=$outlookLocalOnlineComponents; Name='Excel and Outlook LocalOnline' },
+    @{ Left=$outlookLocalComponents; Right=$outlookLocalOnlineComponents; Name='Outlook Local and LocalOnline' }
+)) {
+    $overlap = @($pair.Left | Where-Object { $pair.Right -contains $_ })
+    if ($overlap.Count -ne 0) { throw "$($pair.Name) share components: $($overlap -join ', ')" }
+}
 
 $directories = Get-MsiRows $database 'SELECT `Directory`, `Directory_Parent` FROM `Directory`' 2
 $installDirectory = $directories | Where-Object { $_.Values[0] -eq 'INSTALLFOLDER' }
@@ -67,12 +74,19 @@ $registry = Get-MsiRows $database 'SELECT `Root`, `Key`, `Name`, `Value`, `Compo
 if ($registry | Where-Object { $_.Values[0] -ne '-1' }) { throw 'Install-time Registry rows must all use HKMU; fixed HKCU/HKLM resources break dual scope.' }
 foreach ($officeApp in @('Excel', 'Outlook')) {
     $hostRows = @($registry | Where-Object { $_.Values[1] -eq "Software\Microsoft\Office\$officeApp\Addins\$($officeApp.Substring(0,1).ToLower())Workhelper" })
-    Assert-Equal $hostRows.Count 4 "$officeApp registration row count is invalid."
+    Assert-Equal $hostRows.Count $(if ($officeApp -eq 'Outlook') { 8 } else { 4 }) "$officeApp registration row count is invalid."
     foreach ($row in $hostRows) { Assert-Equal $row.Values[0] '-1' "$officeApp registration must use HKMU." }
-    $loadBehavior = $hostRows | Where-Object { $_.Values[2] -eq 'LoadBehavior' }
-    Assert-Equal $loadBehavior.Values[3] '#3' "$officeApp LoadBehavior is invalid."
-    $manifest = $hostRows | Where-Object { $_.Values[2] -eq 'Manifest' }
-    if ($manifest.Values[3] -notmatch '^file:///\[.+Folder\].+\.vsto\|vstolocal$') { throw "$officeApp manifest registration is invalid." }
+    $loadBehavior = @($hostRows | Where-Object { $_.Values[2] -eq 'LoadBehavior' })
+    foreach ($row in $loadBehavior) { Assert-Equal $row.Values[3] '#3' "$officeApp LoadBehavior is invalid." }
+    $manifests = @($hostRows | Where-Object { $_.Values[2] -eq 'Manifest' })
+    foreach ($manifest in $manifests) {
+        if ($manifest.Values[3] -notmatch '^file:///\[.+Folder\].+\.vsto\|vstolocal$') { throw "$officeApp manifest registration is invalid." }
+    }
+}
+$editionRows = @($registry | Where-Object { $_.Values[1] -eq 'Software\iWorkHelper\Installer' -and $_.Values[2] -eq 'OutlookEdition' })
+Assert-Equal $editionRows.Count 2 'Both Outlook editions must author a persisted HKMU edition marker.'
+foreach ($edition in @('Local', 'LocalOnline')) {
+    if (-not ($editionRows | Where-Object { $_.Values[3] -eq $edition })) { throw "Outlook edition marker is missing: $edition" }
 }
 
 $launchConditions = Get-MsiRows $database 'SELECT `Condition`, `Description` FROM `LaunchCondition`' 2
@@ -88,8 +102,15 @@ $customActions = Get-MsiRows $database 'SELECT `Action`, `Type`, `Source`, `Targ
 foreach ($action in $customActions) {
     # 307 = type 51 property assignment + first-sequence flag. It remains an
     # immediate, non-script, non-elevated action.
-    if (([int]$action.Values[1] -band 0xFF) -ne 51) { throw "Only immediate type-51 property actions are allowed; found $($action.Values[0]) type $($action.Values[1])." }
+    $baseType = [int]$action.Values[1] -band 0xFF
+    if ($action.Values[0] -eq 'RejectMultipleOutlookEditions') {
+        Assert-Equal $baseType 19 'Outlook mutual-exclusion action must be an immediate type-19 error.'
+    }
+    elseif ($baseType -ne 51) { throw "Only immediate type-51 property actions and the type-19 mutual-exclusion guard are allowed; found $($action.Values[0]) type $($action.Values[1])." }
 }
+$executeSequence = Get-MsiRows $database 'SELECT `Action`, `Condition` FROM `InstallExecuteSequence` WHERE `Action`=''RejectMultipleOutlookEditions''' 2
+Assert-Equal $executeSequence.Count 1 'Outlook mutual-exclusion guard must be present once in InstallExecuteSequence.'
+if ($executeSequence[0].Values[1] -notmatch 'OutlookFeature=3' -or $executeSequence[0].Values[1] -notmatch 'OutlookLocalOnlineFeature=3') { throw 'Outlook mutual-exclusion condition does not test both feature action states.' }
 
 $zhMsi = Join-Path $localValidation 'iWorkHelper.zh-CN.msi'
 Copy-Item -LiteralPath $MsiPath -Destination $zhMsi -Force
@@ -107,6 +128,7 @@ Assert-Equal $zhProperties['ProductLanguage'] '2052' 'Chinese transform must set
 Assert-Equal $zhProperties['ProductCode'] $baseProductCode 'Language transform must not change ProductCode; Burn detection and maintenance depend on one product identity.'
 $zhFeatures = Get-MsiRows $zhDatabase 'SELECT `Feature`, `Title` FROM `Feature`' 2
 if (-not ($zhFeatures | Where-Object { $_.Values[0] -eq 'ExcelFeature' -and $_.Values[1] -eq 'Excel 插件' })) { throw 'Chinese Excel feature title was not applied.' }
-if (-not ($zhFeatures | Where-Object { $_.Values[0] -eq 'OutlookFeature' -and $_.Values[1] -eq 'Outlook 插件' })) { throw 'Chinese Outlook feature title was not applied.' }
+if (-not ($zhFeatures | Where-Object { $_.Values[0] -eq 'OutlookFeature' -and $_.Values[1] -eq 'Outlook 插件 - 本地版' })) { throw 'Chinese Outlook Local feature title was not applied.' }
+if (-not ($zhFeatures | Where-Object { $_.Values[0] -eq 'OutlookLocalOnlineFeature' -and $_.Values[1] -eq 'Outlook 插件 - 本地 + 网络版' })) { throw 'Chinese Outlook LocalOnline feature title was not applied.' }
 
-Write-Host "MSI database validation passed: Windows Installer 5.0 dual scope, per-user no-elevation summary flag, stable localized ProductCode, redirectable ProgramFiles64Folder, 2 isolated features, HKMU registration, launch conditions, and zh-CN transform."
+Write-Host "MSI database validation passed: Windows Installer 5.0 dual scope, per-user no-elevation summary flag, stable localized ProductCode, redirectable ProgramFiles64Folder, 3 isolated features with mutually exclusive Outlook editions, HKMU registration, launch conditions, and zh-CN transform."

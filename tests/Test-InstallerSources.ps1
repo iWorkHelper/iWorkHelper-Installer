@@ -11,7 +11,7 @@ if ($joined -match '(?i)(api[_-]?key|secret[_-]?key|access[_-]?token)\s*[=:]\s*[
 if ($executableSources -match '(?i)Copy-Item[^\r\n]*(bin\\Release|obj\\|publish\\)[^\r\n]*\*') { $errors.Add('A broad build/publish directory copy pattern was found.') }
 
 $package = Get-Content -LiteralPath (Join-Path $root 'MSI\Package.wxs') -Raw
-foreach ($required in @('ExcelFeature', 'OutlookFeature', 'Scope="perUserOrMachine"', 'NETFRAMEWORK48FULL', 'VSTORUNTIME', 'OFFICE64PATH')) {
+foreach ($required in @('ExcelFeature', 'OutlookFeature', 'OutlookLocalOnlineFeature', 'RejectMultipleOutlookEditions', 'Scope="perUserOrMachine"', 'NETFRAMEWORK48FULL', 'VSTORUNTIME', 'OFFICE64PATH')) {
     if ($package -notmatch [regex]::Escape($required)) { $errors.Add("MSI requirement missing: $required") }
 }
 
@@ -21,10 +21,16 @@ foreach ($required in @('Root="HKMU"', '|vstolocal', 'LoadBehavior', 'Value="3"'
 }
 
 $ba = (Get-Content (Join-Path $root 'BootstrapperApplication\Bootstrapper.cs') -Raw) + (Get-Content (Join-Path $root 'BootstrapperApplication\InstallerWindow.cs') -Raw)
-foreach ($required in @('BundleScope.PerMachine', 'BundleScope.PerUser', 'engine.Elevate(hwnd)', 'DirectoryPermission.CanWrite', 'ApplyOverridableVariables', 'ParseCommandLine', 'SelectedLanguage', 'InstallFolder', 'WixStdBAScope', 'WixBundleAuthoredScope', 'WixBundlePlannedScope', 'WixBundleElevated', 'ExcelFeature', 'OutlookFeature', 'LaunchAction.Repair', 'LaunchAction.Uninstall', 'WixBundleCommandLineAction', 'WixBundleUILevel', 'RequestState.ForcePresent', 'MsiEnumRelatedProducts', 'InstallLocation')) {
+foreach ($required in @('BundleScope.PerMachine', 'BundleScope.PerUser', 'engine.Elevate(hwnd)', 'DirectoryPermission.CanWrite', 'ApplyOverridableVariables', 'ParseCommandLine', 'SelectedLanguage', 'InstallFolder', 'OutlookEdition', 'OutlookLocalOnlineFeature', 'WixStdBAScope', 'WixBundleAuthoredScope', 'WixBundlePlannedScope', 'WixBundleElevated', 'ExcelFeature', 'OutlookFeature', 'LaunchAction.Repair', 'LaunchAction.Uninstall', 'WixBundleCommandLineAction', 'WixBundleUILevel', 'RequestState.ForcePresent', 'MsiEnumRelatedProducts', 'MsiQueryFeatureState', 'InstallLocation')) {
     if ($ba -notmatch [regex]::Escape($required)) { $errors.Add("Custom BA requirement missing: $required") }
 }
 if ($ba -notmatch 'Chinese = true' -or $ba -notmatch 'IsChecked = true') { $errors.Add('Simplified Chinese is not the default language.') }
+if ($ba -notmatch 'OutlookLocalOnline = true') { $errors.Add('Outlook LocalOnline must be the default edition for a fresh installation.') }
+
+$collector = Get-Content (Join-Path $root 'scripts\Collect-Payload.ps1') -Raw
+foreach ($required in @('Release-Intranet', 'Release-Internet', 'OutlookLocal', 'OutlookLocalOnline', 'Get-FileHash')) {
+    if ($collector -notmatch [regex]::Escape($required)) { $errors.Add("Dual Outlook payload collection requirement missing: $required") }
+}
 
 if ($errors.Count -gt 0) { throw ($errors -join [Environment]::NewLine) }
 Write-Host "Static installer validation passed ($($wxs.Count) source files scanned)."

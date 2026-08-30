@@ -10,11 +10,11 @@
 
 ## 尚未验证
 
-- 最终 Bundle 的全套范围、Feature 和自定义目录交互矩阵。
-- 全部真实安装生命周期、Office 加载、重启恢复和升级状态迁移。
-- 中文/英文交互界面的人工视觉检查。
+- per-machine 下两个 Outlook edition 的完整 Feature/自定义目录矩阵；本次 edition 回归在 per-user 完成。
+- Outlook/Excel 实际启动加载、OCR 功能、Office Resiliency、重启恢复仍需在受控机器人工验证。
+- 中文/英文已做 UI Automation；字体、缩放和高 DPI 的人工视觉检查仍未完成。
 - per-user 受保护自定义路径、拒绝 UAC、Upgrade 和 Office 实际加载仍需在隔离 VM/受控机器验证。1.0.4 的 per-user 默认路径安装/Remove 已真实验证为 planned scope 2 且全程无 UAC；per-machine 默认路径安装/Remove 已真实验证为 planned scope 1 且按预期请求 UAC。
-- 1.0.3 已真实通过 per-user 可写自定义路径、Modify 和 Repair；这些场景尚未用 1.0.4 重新回归。related-bundle headless Upgrade 修复已构建和静态验证，但尚未完成干净的最终升级实测。
+- 1.0.8 已真实通过 per-user Outlook edition 的 Modify/Repair/Remove，并完成 Local 与 LocalOnline 的 related-bundle Upgrade；从不含 `OutlookLocalOnlineFeature` 的 1.0.4 直接升级并映射为 Local 尚未保留旧 EXE 做实测。
 - Office Click-to-Run/Microsoft 365 已覆盖常见的 `Platform=x64` 注册布局，但仍需在更多 Office 更新通道和永久版上做真实安装验证。
 
 ## 踩坑结论
@@ -36,5 +36,8 @@
 - 自定义 BA 必须读取 `WixBundleAction`。旧实现忽略 `/uninstall` 并总从首次配置页自行推断动作，导致 ARP 卸载重新进入安装界面；当前实现只在普通启动时显示 Modify 配置，Uninstall/Repair 直接进入相应确认流程。
 - Bundle `MsiPackage Visible="yes"` 会让内部 MSI 与 Bundle 同时出现在 ARP。必须同时保持 `Visible="no"` 和 MSI `ARPSYSTEMCOMPONENT=1`，但不能删除 MSI registration。
 - Feature 不共享组件；共享 DLL 即使内容相同也分别安装到各自目录。
+- Burn 只有在 `MsiPackage EnableFeatureSelection="yes"` 时才会触发 `PlanMsiFeature`。新增 Outlook edition 后首次真实测试没有该属性，日志完全没有 feature plan 记录，MSI 默认同时请求两个 Level=1 Outlook Feature并被互斥 type-19 action 以 1603 阻止；修复后 Bundle 解包测试固定检查该属性。
+- 启用 Feature selection 后，全新安装的 Detect 状态是 `Absent` 而不是旧逻辑假设的 `Unknown`。新 UI 必须以“主包未安装、三个 Feature 都未安装且没有 edition 标记”判断首次安装默认值，不能只依赖 `Unknown`，否则 Outlook 会错误地默认不勾选。
+- MajorUpgrade 检测时，Burn 的 `DetectMsiFeature` 针对新 ProductCode 返回 Absent，不会代替 BA 查询 related MSI 的旧 Feature 状态。只使用事件状态会让升级把所有 Feature 规划为 Absent，随后 Level=1 默认同时选择两个 Outlook edition并触发互斥错误。BA 现在通过 MSI UpgradeCode + `MsiQueryFeatureState` 恢复旧 Feature 选择，再进入同一 `PlanMsiFeature` 链路。
 - 不把 `bin`、`obj`、Publish、PDB、XML 文档或用户设置纳入 Payload。
 - 编译成功不能替代 MSI 日志、注册表、Office 实际加载及完整生命周期验证。
