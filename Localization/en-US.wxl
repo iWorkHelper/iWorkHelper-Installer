@@ -1,0 +1,16 @@
+<WixLocalization xmlns="http://wixtoolset.org/schemas/v4/wxl" Culture="en-US" Codepage="1252">
+  <String Id="ProductLanguage" Value="1033" />
+  <String Id="ProductCodepage" Value="1252" />
+  <String Id="ProductDescription" Value="Excel and Outlook productivity add-ins" />
+  <String Id="DowngradeError" Value="A newer version of iWorkHelper is already installed." />
+  <String Id="RequiresWindowsX64" Value="iWorkHelper requires 64-bit Windows." />
+  <String Id="RequiresNet48" Value="iWorkHelper requires .NET Framework 4.8 or later." />
+  <String Id="RequiresVsto" Value="iWorkHelper requires Microsoft Visual Studio Tools for Office Runtime." />
+  <String Id="RequiresOffice64" Value="iWorkHelper requires 64-bit Microsoft Office 2016 or later." />
+  <String Id="ExcelFeatureTitle" Value="Excel add-in" />
+  <String Id="ExcelFeatureDescription" Value="Install eWorkHelper for Microsoft Excel." />
+  <String Id="OutlookFeatureTitle" Value="Outlook add-in" />
+  <String Id="OutlookFeatureDescription" Value="Install oWorkHelper for Microsoft Outlook." />
+  <String Id="ExcelAddinDescription" Value="iWorkHelper tools for Excel" />
+  <String Id="OutlookAddinDescription" Value="iWorkHelper tools for Outlook" />
+</WixLocalization>

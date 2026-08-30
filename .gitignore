@@ -1,0 +1,61 @@
+# Build, package, and publish outputs
+artifacts/*
+!artifacts/.gitkeep
+Payload/*
+!Payload/.gitkeep
+**/obj/
+**/bin/
+publish/
+app.publish/
+TestResults/
+coverage/
+
+# WiX/MSI intermediate and package artifacts
+*.log
+*.wixpdb
+*.msi
+*.mst
+*.msm
+*.cab
+*.burn.exe
+*.bundle.exe
+
+# Local signing material and machine-specific configuration
+*.pfx
+*.p12
+*.pem
+*.key
+*.cer
+*.crt
+*.snk
+*.pvk
+.env
+.env.*
+!.env.example
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# IDE, test, and local diagnostic state
+.vs/
+.local/
+*.cache
+*.tmp
+*.temp
+*.bak
+*.backup
+*.old
+*.orig
+*.dmp
+UpgradeLog*.htm
+UpgradeLog*.html
+UpgradeLog*.xml
+MigrationBackup/
+
+# OS and editor metadata
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+Desktop.ini

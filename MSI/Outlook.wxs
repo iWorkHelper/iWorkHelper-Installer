@@ -1,0 +1,35 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Fragment>
+    <ComponentGroup Id="OutlookPayload" Directory="OutlookFolder">
+      <Component Id="OutlookFiles" Guid="{E7F13E62-62BF-485C-B307-52BB642117EF}" Bitness="always64">
+        <File Id="OutlookDll" Source="$(PayloadRoot)\Outlook\oWorkhelper.dll" KeyPath="yes" />
+        <File Id="OutlookDllManifest" Source="$(PayloadRoot)\Outlook\oWorkhelper.dll.manifest" />
+        <File Id="OutlookVsto" Source="$(PayloadRoot)\Outlook\oWorkhelper.vsto" />
+        <File Source="$(PayloadRoot)\Outlook\Microsoft.Office.Tools.Common.v4.0.Utilities.dll" />
+        <File Source="$(PayloadRoot)\Outlook\Microsoft.Office.Tools.Outlook.v4.0.Utilities.dll" />
+        <File Source="$(PayloadRoot)\Outlook\Microsoft.Bcl.HashCode.dll" />
+        <File Source="$(PayloadRoot)\Outlook\System.Buffers.dll" />
+        <File Source="$(PayloadRoot)\Outlook\System.Memory.dll" />
+        <File Source="$(PayloadRoot)\Outlook\System.Numerics.Vectors.dll" />
+        <File Source="$(PayloadRoot)\Outlook\System.Runtime.CompilerServices.Unsafe.dll" />
+        <File Source="$(PayloadRoot)\Outlook\UglyToad.PdfPig.dll" />
+        <File Source="$(PayloadRoot)\Outlook\UglyToad.PdfPig.Core.dll" />
+        <File Source="$(PayloadRoot)\Outlook\UglyToad.PdfPig.DocumentLayoutAnalysis.dll" />
+        <File Source="$(PayloadRoot)\Outlook\UglyToad.PdfPig.Fonts.dll" />
+        <File Source="$(PayloadRoot)\Outlook\UglyToad.PdfPig.Package.dll" />
+        <File Source="$(PayloadRoot)\Outlook\UglyToad.PdfPig.Tokenization.dll" />
+        <File Source="$(PayloadRoot)\Outlook\UglyToad.PdfPig.Tokens.dll" />
+      </Component>
+    </ComponentGroup>
+  </Fragment>
+  <Fragment>
+    <Component Id="OutlookRegistration" Directory="OutlookFolder" Guid="{E4A7BBF7-ECA9-4211-B1CD-83534F4FC8C9}" Bitness="always64">
+      <RegistryKey Root="HKMU" Key="Software\Microsoft\Office\Outlook\Addins\oWorkhelper">
+        <RegistryValue Name="Description" Type="string" Value="!(loc.OutlookAddinDescription)" />
+        <RegistryValue Name="FriendlyName" Type="string" Value="oWorkHelper" />
+        <RegistryValue Name="LoadBehavior" Type="integer" Value="3" />
+        <RegistryValue Name="Manifest" Type="string" Value="file:///[OutlookFolder]oWorkhelper.vsto|vstolocal" KeyPath="yes" />
+      </RegistryKey>
+    </Component>
+  </Fragment>
+</Wix>

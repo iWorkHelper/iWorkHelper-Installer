@@ -1,0 +1,14 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+  </Configurations>
+  <Project Path="MSI/iWorkHelper.Msi.wixproj">
+    <Platform Project="x64" />
+    <Build Solution="Release|x64" />
+  </Project>
+  <Project Path="Bundle/iWorkHelper.Bundle.wixproj">
+    <Platform Project="x64" />
+    <Build Solution="Release|x64" />
+  </Project>
+  <Project Path="BootstrapperApplication/iWorkHelper.BootstrapperApplication.csproj" />
+</Solution>

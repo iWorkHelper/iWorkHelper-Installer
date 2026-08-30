@@ -1,0 +1,47 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+  <Bundle Name="iWorkHelper"
+          Manufacturer="$(InstallerManufacturer)"
+          Version="$(InstallerVersion)"
+          UpgradeCode="{CF2BEB8E-9E86-4A5C-A207-C2EC669DA283}"
+          Compressed="yes">
+    <BootstrapperApplication SourceFile="$(BARoot)\iWorkHelper.BootstrapperApplication.exe">
+      <Payload SourceFile="$(BARoot)\iWorkHelper.BootstrapperApplication.exe.config" />
+      <Payload SourceFile="$(BARoot)\WixToolset.BootstrapperApplicationApi.dll" />
+      <Payload SourceFile="$(BARoot)\mbanative.dll" />
+    </BootstrapperApplication>
+
+    <Variable Name="InstallFolder" Type="string" Value="" Persisted="yes" bal:Overridable="yes" />
+    <Variable Name="SelectedLanguage" Type="string" Value="zh-CN" Persisted="yes" bal:Overridable="yes" />
+    <Variable Name="InstallExcel" Type="numeric" Value="1" Persisted="yes" bal:Overridable="yes" />
+    <Variable Name="InstallOutlook" Type="numeric" Value="1" Persisted="yes" bal:Overridable="yes" />
+    <Variable Name="InstallPerMachine" Type="numeric" Value="0" Persisted="yes" bal:Overridable="yes" />
+    <!-- WixStdBAScope belongs to WixStdBA. This custom BA passes BundleScope to
+         Plan and keeps an equivalent diagnostic variable instead. -->
+    <Variable Name="InstallScope" Type="string" Value="PerUser" Persisted="yes" bal:Overridable="yes" />
+
+    <util:RegistrySearchRef Id="WindowsInstallationTypeSearch" />
+    <util:RegistrySearchRef Id="WindowsBuildSearch" />
+    <util:RegistrySearchRef Id="NetFrameworkReleaseSearch" />
+    <util:RegistrySearchRef Id="VstoRuntimeVersionSearch" />
+    <util:RegistrySearchRef Id="VstoRuntimeVersion32Search" />
+    <util:RegistrySearchRef Id="Office64PathSearch" />
+    <util:RegistrySearchRef Id="OfficeClickToRunPlatformSearch" />
+
+    <Chain>
+      <MsiPackage Id="iWorkHelperMsi"
+                  SourceFile="$(ArtifactsRoot)\iWorkHelper.msi"
+                  Visible="no"
+                  Vital="yes"
+                  bal:PrimaryPackageType="x64">
+        <Payload SourceFile="$(ArtifactsRoot)\iWorkHelper.zh-CN.mst" Name="iWorkHelper.zh-CN.mst" />
+        <MsiProperty Name="INSTALLFOLDER" Value="[InstallFolder]" />
+        <MsiProperty Name="IWORKHELPER_REQUESTEDSCOPE" Value="[InstallScope]" />
+        <MsiProperty Name="IWORKHELPER_BUNDLEPLANNEDSCOPE" Value="[WixBundlePlannedScope]" />
+        <MsiProperty Name="IWORKHELPER_BUNDLEELEVATED" Value="[WixBundleElevated]" />
+        <MsiProperty Name="TRANSFORMS" Value="iWorkHelper.zh-CN.mst" Condition="SelectedLanguage = &quot;zh-CN&quot;" />
+      </MsiPackage>
+    </Chain>
+  </Bundle>
+</Wix>

@@ -1,0 +1,16 @@
+<WixLocalization xmlns="http://wixtoolset.org/schemas/v4/wxl" Culture="zh-CN" Codepage="936">
+  <String Id="ProductLanguage" Value="2052" />
+  <String Id="ProductCodepage" Value="936" />
+  <String Id="ProductDescription" Value="Excel 与 Outlook 工作效率插件" />
+  <String Id="DowngradeError" Value="已安装更高版本的 iWorkHelper。" />
+  <String Id="RequiresWindowsX64" Value="iWorkHelper 需要 64 位 Windows。" />
+  <String Id="RequiresNet48" Value="iWorkHelper 需要 .NET Framework 4.8 或更高版本。" />
+  <String Id="RequiresVsto" Value="iWorkHelper 需要 Microsoft Visual Studio Tools for Office Runtime。" />
+  <String Id="RequiresOffice64" Value="iWorkHelper 需要 64 位 Microsoft Office 2016 或更高版本。" />
+  <String Id="ExcelFeatureTitle" Value="Excel 插件" />
+  <String Id="ExcelFeatureDescription" Value="为 Microsoft Excel 安装 eWorkHelper。" />
+  <String Id="OutlookFeatureTitle" Value="Outlook 插件" />
+  <String Id="OutlookFeatureDescription" Value="为 Microsoft Outlook 安装 oWorkHelper。" />
+  <String Id="ExcelAddinDescription" Value="iWorkHelper Excel 工具" />
+  <String Id="OutlookAddinDescription" Value="iWorkHelper Outlook 工具" />
+</WixLocalization>
