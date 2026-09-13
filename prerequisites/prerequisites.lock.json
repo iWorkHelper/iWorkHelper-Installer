@@ -1,0 +1,18 @@
+﻿{
+    "generatedAtUtc":  "2026-09-12T15:07:53.0941904Z",
+    "prerequisites":  {
+                          "vstoRuntime":  {
+                                              "name":  "vstor_redist.exe",
+                                              "source":  "https://download.microsoft.com/download/5/d/2/5d24f8f8-efbb-4b63-aa33-3785e3104713/vstor_redist.exe",
+                                              "version":  "10.0.60917",
+                                              "fileVersion":  "10.0.60917.00",
+                                              "productVersion":  "10.0.60917.00",
+                                              "sizeBytes":  41828424,
+                                              "sha256":  "CFE1A40BBE4A50022DB2164ABDB0154984E2CECB761A23CDC81CB5754F6E0A18",
+                                              "authenticodeStatus":  "Valid",
+                                              "signer":  "Microsoft Corporation",
+                                              "signerSubject":  "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+                                              "acquiredAtUtc":  "2026-09-12T15:07:53.0921971Z"
+                                          }
+                      }
+}

@@ -1,73 +1,87 @@
 # iWorkHelper Installer
 
-iWorkHelper Installer 是面向 Windows x64 的统一安装器源码，为 eWorkHelper（Excel VSTO）与 oWorkHelper（Outlook VSTO）提供单一 EXE 入口、可选功能、双安装范围和中英文界面。
+`iWorkHelper-Installer` 是 iWorkHelper 统一安装程序项目，用于部署现有的 Excel VSTO 插件 `eWorkHelper` 与 Outlook VSTO 插件 `oWorkHelper`。
 
-当前安装器版本为 `1.0.9`。它封装 eWorkHelper `1.1.260822.6` 与 oWorkHelper `1.2.260822.3`；两个加载项保留各自独立的版本规则。
+当前稳定版本：`1.2.0`。
 
-## 主要功能
+## 目标产物
 
-- 使用 WiX Toolset 构建统一 Burn Bundle 与 MSI。
-- 支持按当前用户或所有用户安装。
-- 支持独立选择 Excel、Outlook 或两个加载项；Outlook 可互斥选择本地版或本地 + 网络版。
-- 支持简体中文与英文安装界面。
-- 检测 Windows、Office x64、.NET Framework 4.8 和 VSTO Runtime 前置条件。
-- 支持安装、修改、修复、卸载与主版本升级流程。
+```text
+iWorkHelper-Setup-1.2.0.exe
+```
 
-## 技术栈与支持环境
+安装程序设计为单一 Windows 原生安装向导，支持：
 
-- WiX Toolset 7、Burn、MSI。
-- C# / .NET Framework 4.8 自定义 Bootstrapper Application。
-- Windows 10 1809+ 或 Windows 11 x64。
-- Microsoft Office 2016+ x64。
-- Visual Studio 2022；在 IDE 中加载 WiX 项目时需要 HeatWave 扩展。
+- 选择安装 `eWorkHelper`、`oWorkHelper` 或二者同时安装。
+- 选择 `CurrentUser` 或 `AllUsers` 安装范围。
+- 自定义 `iWorkHelper` 根安装目录。
+- 检测实际 Office Host 与 Office x86/x64 架构。
+- 自动检测并在缺失、版本不足或损坏时安装/修复 VSTO Runtime。
+- 写入对应 VSTO Add-in 注册项。
+- 卸载、维护安装与后续升级。
+
+## 安装
+
+普通用户请从 GitHub Releases 下载：
+
+```text
+iWorkHelper-Setup-1.2.0.exe
+```
+
+下载后双击运行安装向导，按需选择 Excel 插件 `eWorkHelper`、Outlook 插件 `oWorkHelper`、安装范围和安装目录。
 
 ## 构建
 
-构建前应先在同级目录准备 eWorkHelper 与 oWorkHelper 的 Release 输出。正式 VSTO 清单需要受信任证书签名；证书、指纹文件和其他本机签名材料不得提交到 Git。
+一键构建入口：
 
 ```powershell
-dotnet tool restore
-dotnet restore .\iWorkHelper-Installer.slnx
-.\build.ps1
+.\scripts\build.ps1
 ```
 
-构建脚本负责收集精确 Payload、构建本地化 MSI 和 Bundle，并执行适用的静态验证。可用参数、输出位置和证书要求见 [构建文档](docs/Build.md)。
-
-## 安装与使用
-
-从 [GitHub Releases](https://github.com/iWorkHelper/iWorkHelper-Installer/releases) 下载 `iWorkHelper-Setup-1.0.9-x64.exe`。关闭 Excel 和 Outlook 后运行安装器，选择当前用户或所有用户安装，再按需选择 Excel、Outlook Local 或 Outlook Local + Online。安装后可从 Windows“已安装的应用”中修改、修复或卸载。
-
-安装器不会自动下载 .NET Framework 4.8 或 VSTO Runtime；环境检查未通过时会提供 Microsoft 官方页面入口。
-
-## 测试
+首次构建或本机缺少 VSTO Runtime prerequisite 时，先执行：
 
 ```powershell
-.\tests\Test-InstallerSources.ps1
+.\scripts\build.ps1 -AcquirePrerequisites
 ```
 
-自动构建与数据库检查不能替代真实安装生命周期验证。发布前应在干净的 Windows x64 环境中覆盖 Excel only、Outlook only、Both、per-user、per-machine、Modify、Repair、Remove 与 Upgrade。
+该命令会从 Microsoft 官方 `download.microsoft.com` 获取 `prerequisites\vstor_redist.exe`，验证 Authenticode 签名、Microsoft 发布者、VSTO Runtime 10.0.60917 版本、PE 文件头、文件大小和 SHA-256，并写入 `prerequisites\prerequisites.lock.json`。`vstor_redist.exe` 是本地构建依赖，不进入 Git；最终安装 EXE 会内嵌它以支持目标电脑离线安装。
 
-## 项目结构
+输出：
 
 ```text
-BootstrapperApplication/  自定义安装界面与 Burn 生命周期
-Bundle/                   Bundle Chain、搜索与入口定义
-MSI/                      MSI Package、Feature 与 VSTO 注册
-Localization/             中英文资源
-Payload/                  构建时收集的加载项文件（不提交产物）
-scripts/                  Payload、证书与开发环境辅助脚本
-tests/                    源码、Bundle 与 MSI 自动检查
-docs/                     架构、构建、测试和维护文档
+build\iWorkHelper-Setup-<InstallerVersion>.exe
+build\packaged-components.json
 ```
 
-## 开发状态
+默认打包：
 
-源码、CLI 构建、MSI/Bundle 静态检查及主要安装范围流程已有验证记录；目标 Office 组合、升级路径和 IDE 加载仍应按 [测试文档](docs/Testing.md) 与 [已知问题](docs/KnownIssues.md) 持续验证。
+- `eWorkHelper Release`
+- `oWorkHelper Local`：仅本地 OCR，对应 `Release-Intranet`
+- `oWorkHelper Baidu`：本地 + Baidu OCR，对应 `Release-Internet`
 
-## 文档
+安装 oWorkHelper 时默认选择 `Baidu`。安装器不收集或保存 Baidu AK/SK/API Key/Secret Key；在线 OCR 凭据仍由 oWorkHelper 自身设置页配置。
 
-从 [文档索引](docs/README.md) 开始。修改安装器行为时，应同步维护需求、架构、生命周期、注册、构建和测试说明。
+当前安装器注册元数据仍标记为 `Development/Test` 信任策略。公开发布前如需企业级信任链，应替换为正式代码签名/清单签名策略，并完成目标环境矩阵验证。
+
+## 技术路线
+
+当前技术路线：使用 Inno Setup 7 作为 Installer Engine。
+
+详见：
+
+- [Architecture](docs/ARCHITECTURE.md)
+- [Development](docs/DEVELOPMENT.md)
+- [Requirements](docs/REQUIREMENTS.md)
+- [Release](docs/RELEASE.md)
+- [Troubleshooting](docs/TROUBLESHOOTING.md)
+
+## 重要约束
+
+- Installer 项目不得为了部署便利修改 `../eWorkHelper` 或 `../oWorkHelper` 的业务代码、命名空间、程序集名、GUID 或目标框架。
+- 正式发布不能使用开发清单证书 `CN=iWorkHelper Development Manifest Signing` 作为生产信任方案。
+- 不得仅根据 Windows 位数推断 Office 位数。
+- 正常 Windows + Office 环境下不重复安装已满足要求的 Runtime；VSTO Runtime 缺失、版本不足或损坏时由安装器使用内置 Microsoft 官方 `vstor_redist.exe` 自动补齐。
 
 ## License
 
-本项目采用 [MIT License](LICENSE)。
+License: [MIT](LICENSE)
