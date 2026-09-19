@@ -62,7 +62,7 @@ Compile iWorkHelper-Setup.exe with Inno Setup 7
 示例：CurrentUser + 静默安装 oWorkHelper Local：
 
 ```powershell
-.\build\iWorkHelper-Setup-1.2.1.exe `
+ .\build\iWorkHelper-Setup-1.3.0.exe `
   /CURRENTUSER /VERYSILENT /SUPPRESSMSGBOXES /NORESTART `
   /DIR="$env:LOCALAPPDATA\iWorkHelper" `
   /COMPONENTS=oworkhelper `
@@ -73,7 +73,7 @@ Compile iWorkHelper-Setup.exe with Inno Setup 7
 同时安装两个组件：
 
 ```powershell
-.\build\iWorkHelper-Setup-1.2.1.exe /CURRENTUSER /VERYSILENT /SUPPRESSMSGBOXES /NORESTART `
+.\build\iWorkHelper-Setup-1.3.0.exe /CURRENTUSER /VERYSILENT /SUPPRESSMSGBOXES /NORESTART `
   /DIR="$env:LOCALAPPDATA\iWorkHelper" /COMPONENTS=eworkhelper,oworkhelper `
   /OWORKHELPER_VARIANT=Local /LOG="$env:TEMP\iworkhelper-install.log"
 ```

@@ -2,20 +2,20 @@
 
 ## 当前版本
 
-当前安装器产品版本：`1.2.1`。
+当前安装器产品版本：`1.3.0`。
 
-安装器文件版本等必须为四段数值格式时使用 `1.2.1.0`。默认输出：
+安装器文件版本等必须为四段数值格式时使用 `1.3.0.0`。默认输出：
 
 ```text
-build/iWorkHelper-Setup-1.2.1.exe
+build/iWorkHelper-Setup-1.3.0.exe
 ```
 
 ## 版本来源
 
 | 项目 | 来源 |
 | --- | --- |
-| InstallerVersion | `scripts/build.ps1` 参数，默认 `1.2.1` |
-| InstallerFileVersion | 由产品版本派生，默认 `1.2.1.0` |
+| InstallerVersion | `scripts/build.ps1` 参数，默认 `1.3.0` |
+| InstallerFileVersion | 由产品版本派生，默认 `1.3.0.0` |
 | eWorkHelperVersion | eWorkHelper `AssemblyInformationalVersion` |
 | oWorkHelperVersion | oWorkHelper `AssemblyInformationalVersion` |
 
@@ -34,7 +34,7 @@ build/iWorkHelper-Setup-1.2.1.exe
 标准发布验证命令（CurrentUser，安装 oWorkHelper Local，隔离目录 + 日志）：
 
 ```powershell
-build\iWorkHelper-Setup-1.2.1.exe /CURRENTUSER /VERYSILENT /SUPPRESSMSGBOXES /NORESTART `
+build\iWorkHelper-Setup-1.3.0.exe /CURRENTUSER /VERYSILENT /SUPPRESSMSGBOXES /NORESTART `
   /DIR="$env:TEMP\iworkhelper-verify" /COMPONENTS=oworkhelper `
   /OWORKHELPER_VARIANT=Local /LOG="$env:TEMP\iworkhelper-install.log"
 ```
@@ -62,6 +62,11 @@ build\iWorkHelper-Setup-1.2.1.exe /CURRENTUSER /VERYSILENT /SUPPRESSMSGBOXES /NO
 - `.gitignore` 覆盖生成目录、前置依赖 payload、日志、缓存、证书和本地配置。
 
 ## 变更记录
+
+### v1.3.0
+
+- 更新 eWorkHelper、oWorkHelper 与统一安装器版本至 `1.3.0`。
+- 安装器文件版本为 `1.3.0.0`，默认输出 `iWorkHelper-Setup-1.3.0.exe`。
 
 ### v1.2.1
 

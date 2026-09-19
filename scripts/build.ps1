@@ -1,5 +1,5 @@
 param(
-    [string]$InstallerVersion = '1.2.1',
+    [string]$InstallerVersion = '1.3.0',
     [switch]$SkipPluginBuild,
     [switch]$AcquirePrerequisites
 )

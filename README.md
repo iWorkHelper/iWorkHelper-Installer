@@ -2,12 +2,12 @@
 
 `iWorkHelper-Installer` 是 iWorkHelper 统一安装程序项目，用于部署现有的 Excel VSTO 插件 `eWorkHelper` 与 Outlook VSTO 插件 `oWorkHelper`。
 
-当前稳定版本：`1.2.1`。
+当前稳定版本：`1.3.0`。
 
 ## 目标产物
 
 ```text
-iWorkHelper-Setup-1.2.1.exe
+iWorkHelper-Setup-1.3.0.exe
 ```
 
 安装程序设计为单一 Windows 原生安装向导，支持：
@@ -72,7 +72,7 @@ build\packaged-components.json
 两个组件都属于自定义类型且默认不勾选，因此**静默安装必须显式传入 `/COMPONENTS=`**；缺少该参数时不会有任何组件被选中，安装会直接中止。
 
 ```powershell
-iWorkHelper-Setup-1.2.1.exe /CURRENTUSER /VERYSILENT /SUPPRESSMSGBOXES /NORESTART `
+iWorkHelper-Setup-1.3.0.exe /CURRENTUSER /VERYSILENT /SUPPRESSMSGBOXES /NORESTART `
   /DIR="$env:LOCALAPPDATA\iWorkHelper" /COMPONENTS=oworkhelper `
   /OWORKHELPER_VARIANT=Local /LOG="$env:TEMP\iworkhelper-install.log"
 ```

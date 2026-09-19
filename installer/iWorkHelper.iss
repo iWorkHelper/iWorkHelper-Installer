@@ -1,9 +1,9 @@
 #define AppName "iWorkHelper"
 #ifndef InstallerVersion
-#define InstallerVersion "1.2.1"
+#define InstallerVersion "1.3.0"
 #endif
 #ifndef InstallerFileVersion
-#define InstallerFileVersion "1.2.1.0"
+#define InstallerFileVersion "1.3.0.0"
 #endif
 #ifndef EWorkHelperVersion
 #define EWorkHelperVersion "unknown"
