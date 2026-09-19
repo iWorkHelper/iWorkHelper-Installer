@@ -46,3 +46,12 @@ iWorkHelper Installer 是统一 Windows 安装程序，用于部署 Excel VSTO �
 - `AppName=iWorkHelper`。
 - `AppId={{9B51BBD1-03A5-4AE0-9B0E-58C8B7B5E8C1}` 固定不随版本、组件或 Variant 变化。
 - Local/Baidu 当前不支持同机并存；如未来要求并存，需要设计新的产品身份。
+
+## 安装状态与升级策略
+
+- 启动时按固定 `AppId` 检查 Inno Setup 卸载记录（HKCU/HKLM 注册表视图），并与 `Software\\iWorkHelper\\Installer` 元数据交叉校验。
+- 元数据提供安装路径、安装器版本、安装范围、组件和 `OWorkHelperVariant`；卸载记录提供官方 `DisplayName`、`DisplayVersion` 和 `InstallLocation`。
+- 只有一条记录、身份一致、版本可解析且路径存在时，才认为可以自动维护。多条记录、路径/版本不一致或路径失效会阻止自动覆盖。
+- 数字版本比较结果为：低版本执行原路径升级，同版本执行修复/重新安装，高版本安装包被阻止降级。
+- 升级/修复继承原安装路径、安装范围和 OCR Variant；本项目不提供安全的跨目录迁移，因此用户修改路径时必须先卸载后重新安装。
+- 升级前保存关键元数据和 VSTO Manifest 注册，安装失败时恢复注册表检查点；安装文件回滚依赖 Inno Setup 自身的失败回滚。无法覆盖被外部进程长期占用、磁盘/权限故障等所有文件系统故障。

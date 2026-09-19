@@ -2,12 +2,12 @@
 
 `iWorkHelper-Installer` 是 iWorkHelper 统一安装程序项目，用于部署现有的 Excel VSTO 插件 `eWorkHelper` 与 Outlook VSTO 插件 `oWorkHelper`。
 
-当前稳定版本：`1.2.0`。
+当前稳定版本：`1.2.1`。
 
 ## 目标产物
 
 ```text
-iWorkHelper-Setup-1.2.0.exe
+iWorkHelper-Setup-1.2.1.exe
 ```
 
 安装程序设计为单一 Windows 原生安装向导，支持：
@@ -22,15 +22,21 @@ iWorkHelper-Setup-1.2.0.exe
 
 ## 安装
 
-普通用户请从 GitHub Releases 下载：
-
-```text
-iWorkHelper-Setup-1.2.0.exe
-```
+请从 [GitHub Releases](https://github.com/iWorkHelper/iWorkHelper-Installer/releases) 下载：
 
 下载后双击运行安装向导，按需选择 Excel 插件 `eWorkHelper`、Outlook 插件 `oWorkHelper`、安装范围和安装目录。
 
 ## 构建
+
+### 构建前置条件
+
+| 前置条件 | 说明 |
+| --- | --- |
+| Inno Setup 7 | 需要 `ISCC.exe`。默认搜索路径包含 `%ProgramFiles%\Inno Setup 7`、`%LOCALAPPDATA%\Programs\Inno Setup 7` 与 `PATH`。 |
+| Visual Studio 2022 MSBuild | 需安装 Office/SharePoint 开发 (VSTO) 工作负载；使用 `%ProgramFiles%\Microsoft Visual Studio\2022\<Edition>\MSBuild\Current\Bin\MSBuild.exe`。 |
+| .NET Framework 4.8 Developer Pack | 插件项目目标框架。 |
+| VSTO 清单签名证书 | 证书存储（`CurrentUser\My` 或 `LocalMachine\My`）中需存在含私钥的清单签名证书（例如开发证书 `CN=iWorkHelper Development Manifest Signing`）；也可通过环境变量 `IWORKHELPER_MANIFEST_CERT_THUMBPRINT` 显式指定指纹。构建脚本会自动查找，找不到则直接失败。 |
+| `prerequisites\vstor_redist.exe` | Microsoft 官方 VSTO Runtime 前置包，作为离线安装 payload 被内嵌。文件缺失时先执行 `.\scripts\build.ps1 -AcquirePrerequisites`。 |
 
 一键构建入口：
 
@@ -60,6 +66,18 @@ build\packaged-components.json
 - `oWorkHelper Baidu`：本地 + Baidu OCR，对应 `Release-Internet`
 
 安装 oWorkHelper 时默认选择 `Baidu`。安装器不收集或保存 Baidu AK/SK/API Key/Secret Key；在线 OCR 凭据仍由 oWorkHelper 自身设置页配置。
+
+## 静默安装
+
+两个组件都属于自定义类型且默认不勾选，因此**静默安装必须显式传入 `/COMPONENTS=`**；缺少该参数时不会有任何组件被选中，安装会直接中止。
+
+```powershell
+iWorkHelper-Setup-1.2.1.exe /CURRENTUSER /VERYSILENT /SUPPRESSMSGBOXES /NORESTART `
+  /DIR="$env:LOCALAPPDATA\iWorkHelper" /COMPONENTS=oworkhelper `
+  /OWORKHELPER_VARIANT=Local /LOG="$env:TEMP\iworkhelper-install.log"
+```
+
+组件名：`eworkhelper`、`oworkhelper`（多个用英文逗号分隔）；`/OWORKHELPER_VARIANT` 取 `Local` 或 `Baidu`，缺省 `Baidu`。详见 [Development](docs/DEVELOPMENT.md)。
 
 当前安装器注册元数据仍标记为 `Development/Test` 信任策略。公开发布前如需企业级信任链，应替换为正式代码签名/清单签名策略，并完成目标环境矩阵验证。
 

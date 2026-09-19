@@ -1,5 +1,5 @@
 param(
-    [string]$InstallerVersion = '1.2.0',
+    [string]$InstallerVersion = '1.2.1',
     [switch]$SkipPluginBuild,
     [switch]$AcquirePrerequisites
 )
@@ -148,10 +148,42 @@ function Test-MicrosoftPublisher($Signature) {
     return $false
 }
 
+function Get-VstoRedistExpectation($LockPath) {
+    # I-10: prerequisites.lock.json is the single source of truth for the expected VSTO
+    # Runtime version prefix and download source. build.ps1 must not carry its own copy of
+    # those facts; it only checks that the lock file itself is usable.
+    if (-not (Test-Path -LiteralPath $LockPath -PathType Leaf)) {
+        Fail "VSTO Runtime prerequisite lock file not found: $LockPath. Run scripts\acquire-prerequisites.ps1 first."
+    }
+
+    $lock = Get-Content -LiteralPath $LockPath -Raw | ConvertFrom-Json
+    $locked = $lock.prerequisites.vstoRuntime
+    if (-not $locked) {
+        Fail "VSTO Runtime prerequisite lock file is missing prerequisites.vstoRuntime: $LockPath"
+    }
+
+    $lockedSource = [string]$locked.source
+    $lockedVersion = [string]$locked.version
+    if ([string]::IsNullOrWhiteSpace($lockedSource) -or
+        $lockedSource -notmatch '^https://download\.microsoft\.com/.*/vstor_redist\.exe$' -or
+        $lockedVersion -notmatch '^\d+\.\d+(\.\d+)*$') {
+        Fail "VSTO Runtime prerequisite lock file declares an unusable source or version. Source='$lockedSource' Version='$lockedVersion' LockFile=$LockPath"
+    }
+
+    return [pscustomobject]@{
+        source = $lockedSource
+        version = $lockedVersion
+        raw = $locked
+    }
+}
+
 function Test-VstoRedistPayload($Path, $LockPath) {
-    $expectedVersionPrefix = '10.0.60917'
     $minimumSizeBytes = 30MB
-    $expectedSource = 'https://download.microsoft.com/download/5/d/2/5d24f8f8-efbb-4b63-aa33-3785e3104713/vstor_redist.exe'
+
+    $expectation = Get-VstoRedistExpectation $LockPath
+    $expectedVersionPrefix = $expectation.version
+    $expectedSource = $expectation.source
+    $locked = $expectation.raw
 
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
         Fail "VSTO Runtime prerequisite payload not found: $Path. Place the official Microsoft vstor_redist.exe there before building the offline installer."
@@ -186,18 +218,6 @@ function Test-VstoRedistPayload($Path, $LockPath) {
 
     $hash = Get-FileHash -LiteralPath $Path -Algorithm SHA256
 
-    if (-not (Test-Path -LiteralPath $LockPath -PathType Leaf)) {
-        Fail "VSTO Runtime prerequisite lock file not found: $LockPath. Run scripts\acquire-prerequisites.ps1 first."
-    }
-
-    $lock = Get-Content -LiteralPath $LockPath -Raw | ConvertFrom-Json
-    $locked = $lock.prerequisites.vstoRuntime
-    if (-not $locked) {
-        Fail "VSTO Runtime prerequisite lock file is missing prerequisites.vstoRuntime: $LockPath"
-    }
-    if ($locked.source -ne $expectedSource) {
-        Fail "VSTO Runtime prerequisite lock source mismatch. Expected=$expectedSource Actual=$($locked.source)"
-    }
     if ($locked.sha256 -ne $hash.Hash) {
         Fail "VSTO Runtime prerequisite lock SHA256 mismatch. Expected=$($locked.sha256) Actual=$($hash.Hash)"
     }

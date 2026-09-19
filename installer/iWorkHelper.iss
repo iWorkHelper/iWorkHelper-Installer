@@ -1,9 +1,9 @@
 #define AppName "iWorkHelper"
 #ifndef InstallerVersion
-#define InstallerVersion "1.2.0"
+#define InstallerVersion "1.2.1"
 #endif
 #ifndef InstallerFileVersion
-#define InstallerFileVersion "1.2.0.0"
+#define InstallerFileVersion "1.2.1.0"
 #endif
 #ifndef EWorkHelperVersion
 #define EWorkHelperVersion "unknown"
@@ -38,9 +38,13 @@ VersionInfoVersion={#InstallerFileVersion}
 VersionInfoProductName=iWorkHelper Installer
 VersionInfoProductVersion={#InstallerFileVersion}
 SetupLogging=yes
+; I-06: rely on Restart Manager file-in-use detection as a backstop for the manual prompt
+; below (which only reacts to Office top-level windows and can miss invisible instances).
+CloseApplications=yes
+RestartApplications=no
 
 [Languages]
-Name: "chinesesimp"; MessagesFile: "compiler:Default.isl"
+Name: "chinesesimp"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
 
 [Types]
 Name: "custom"; Description: "自定义安装"; Flags: iscustom
@@ -62,6 +66,7 @@ Type: dirifempty; Name: "{app}"
 
 [Code]
 const
+  AppIdValue = '{9B51BBD1-03A5-4AE0-9B0E-58C8B7B5E8C1}';
   OfficeArchX86 = 'x86';
   OfficeArchX64 = 'x64';
   OfficeArchUnknown = 'Unknown';
@@ -71,6 +76,11 @@ const
   VstoRuntimeKeyR = 'Software\Microsoft\VSTO Runtime Setup\v4R';
   VstoRuntimeKeyOffice = 'Software\Microsoft\VSTO Runtime Setup\v4';
   VstoMinimumMajorVersion = 10;
+  InstallModeFirst = 'first-install';
+  InstallModeUpgrade = 'upgrade';
+  InstallModeRepair = 'repair';
+  InstallModeDowngrade = 'downgrade-blocked';
+  InstallModeUnsafe = 'unsafe-state';
 
 var
   OWorkHelperOcrPage: TInputOptionWizardPage;
@@ -82,8 +92,49 @@ var
   DotNetDetected: Boolean;
   VstoDetected: Boolean;
   VstoRuntimeStatus: String;
+  InstallStateDetected: Boolean;
+  InstallStateAmbiguous: Boolean;
+  InstallStateUnsafe: Boolean;
+  InstalledVersion: String;
+  InstalledPath: String;
+  InstalledVariant: String;
+  InstalledScope: String;
+  InstalledRegistryRoot: Integer;
+  InstallMode: String;
+  InstallStateMessageShown: Boolean;
+  UpgradePathLocked: Boolean;
+  UpgradeBackupTaken: Boolean;
+  UpgradeCompleted: Boolean;
+  BackupMetadataVersion: String;
+  BackupMetadataPath: String;
+  BackupMetadataScope: String;
+  BackupMetadataComponents: String;
+  BackupMetadataVariant: String;
+  BackupMetadataOfficeArchitecture: String;
+  BackupMetadataOfficeArchitectureSource: String;
+  BackupMetadataOfficeVersion: String;
+  BackupMetadataEWorkHelperVersion: String;
+  BackupMetadataOWorkHelperVersion: String;
+  BackupMetadataTrustMode: String;
+  BackupEManifest: String;
+  BackupOManifest: String;
+  BackupELoadBehavior: Cardinal;
+  BackupOLoadBehavior: Cardinal;
+  BackupEManifestExists: Boolean;
+  BackupOManifestExists: Boolean;
+  UpgradeBackupDir: String;
 
-function FindWindow(lpClassName: String; lpWindowName: String): Longword;
+  CandidateCount: Integer;
+  CandidatePath: array[0..2] of String;
+  CandidateVersion: array[0..2] of String;
+  CandidateVariant: array[0..2] of String;
+  CandidateScope: array[0..2] of String;
+  CandidateRoot: array[0..2] of Integer;
+
+function NormalizeOWorkHelperVariant(Value: String): String; forward;
+function RegistryRootForInstall(): Integer; forward;
+
+function FindWindowW(lpClassName: String; lpWindowName: String): HWND;
   external 'FindWindowW@user32.dll stdcall';
 
 function BoolText(Value: Boolean): String;
@@ -104,6 +155,258 @@ begin
     Result := 'HKLM64'
   else
     Result := 'HKLM';
+end;
+
+function NormalizeInstallPath(Value: String): String;
+begin
+  Result := Value;
+  while (Length(Result) > 3) and
+        ((Result[Length(Result)] = '\\') or (Result[Length(Result)] = '/')) do
+    Delete(Result, Length(Result), 1);
+end;
+
+function IsUsableVersion(Value: String): Boolean;
+var
+  i: Integer;
+  hasDigit: Boolean;
+begin
+  Result := False;
+  hasDigit := False;
+  if Value = '' then exit;
+  for i := 1 to Length(Value) do begin
+    if (Value[i] >= '0') and (Value[i] <= '9') then
+      hasDigit := True
+    else if Value[i] <> '.' then
+      exit;
+  end;
+  Result := hasDigit;
+end;
+
+function ReadVersionPart(Value: String; var Position: Integer; var Part: String): Boolean;
+var
+  startPos: Integer;
+begin
+  while (Position <= Length(Value)) and (Value[Position] = '.') do
+    Position := Position + 1;
+  startPos := Position;
+  while (Position <= Length(Value)) and (Value[Position] >= '0') and (Value[Position] <= '9') do
+    Position := Position + 1;
+  Result := Position > startPos;
+  if not Result then begin
+    Part := '0';
+    exit;
+  end;
+  Part := Copy(Value, startPos, Position - startPos);
+  while (Length(Part) > 1) and (Part[1] = '0') do
+    Delete(Part, 1, 1);
+end;
+
+{ Compare numeric version components, never lexical string order. }
+function CompareVersionSafe(Left, Right: String): Integer;
+var
+  leftPos, rightPos, i: Integer;
+  leftPart, rightPart: String;
+  leftOk, rightOk: Boolean;
+begin
+  leftPos := 1;
+  rightPos := 1;
+  for i := 1 to 8 do begin
+    leftOk := ReadVersionPart(Left, leftPos, leftPart);
+    rightOk := ReadVersionPart(Right, rightPos, rightPart);
+    if (not leftOk) and (not rightOk) then begin
+      Result := 0;
+      exit;
+    end;
+    if not leftOk then leftPart := '0';
+    if not rightOk then rightPart := '0';
+    if Length(leftPart) < Length(rightPart) then begin
+      Result := -1;
+      exit;
+    end;
+    if Length(leftPart) > Length(rightPart) then begin
+      Result := 1;
+      exit;
+    end;
+    if CompareText(leftPart, rightPart) < 0 then begin
+      Result := -1;
+      exit;
+    end;
+    if CompareText(leftPart, rightPart) > 0 then begin
+      Result := 1;
+      exit;
+    end;
+    if (not leftOk) and (not rightOk) then break;
+  end;
+  Result := 0;
+end;
+
+function OfficialUninstallRecord(Root: Integer; var InstallLocation, DisplayVersion: String): Boolean;
+var
+  key: String;
+  displayName: String;
+  appPath: String;
+begin
+  appPath := '';
+  key := 'Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\' + AppIdValue + '_is1';
+  Result := RegQueryStringValue(Root, key, 'DisplayName', displayName);
+  if not Result then
+    exit;
+
+  { The AppId key is necessary but not sufficient: keep the product identity check
+    so another Office add-in is never treated as iWorkHelper. }
+  if CompareText(displayName, 'iWorkHelper') <> 0 then begin
+    Result := False;
+    exit;
+  end;
+
+  InstallLocation := '';
+  DisplayVersion := '';
+  RegQueryStringValue(Root, key, 'InstallLocation', InstallLocation);
+  RegQueryStringValue(Root, key, 'DisplayVersion', DisplayVersion);
+  if InstallLocation = '' then
+    RegQueryStringValue(Root, key, 'Inno Setup: App Path', appPath);
+  if (InstallLocation = '') and (appPath <> '') then
+    InstallLocation := appPath;
+end;
+
+procedure AddInstallCandidate(Root: Integer; Scope, Path, Version, Variant: String);
+var
+  i: Integer;
+begin
+  Path := NormalizeInstallPath(Path);
+  for i := 0 to CandidateCount - 1 do
+    if (CandidateRoot[i] = Root) and (CompareText(CandidatePath[i], Path) = 0) then begin
+      if (CandidateVersion[i] <> '') and (Version <> '') and
+         (CompareText(CandidateVersion[i], Version) <> 0) then
+        InstallStateUnsafe := True;
+      exit;
+    end;
+
+  if CandidateCount >= 3 then begin
+    InstallStateAmbiguous := True;
+    exit;
+  end;
+  CandidateRoot[CandidateCount] := Root;
+  CandidateScope[CandidateCount] := Scope;
+  CandidatePath[CandidateCount] := Path;
+  CandidateVersion[CandidateCount] := Version;
+  CandidateVariant[CandidateCount] := Variant;
+  CandidateCount := CandidateCount + 1;
+end;
+
+procedure ProbeInstallRecord(Root: Integer; Scope: String);
+var
+  metadataPath, metadataVersion, metadataVariant: String;
+  uninstallPath, uninstallVersion: String;
+  hasMetadata, hasUninstall: Boolean;
+begin
+  metadataPath := '';
+  metadataVersion := '';
+  metadataVariant := '';
+  hasMetadata := RegQueryStringValue(Root, MetadataSubkey, 'InstallPath', metadataPath);
+  RegQueryStringValue(Root, MetadataSubkey, 'InstallerVersion', metadataVersion);
+  RegQueryStringValue(Root, MetadataSubkey, 'OWorkHelperVariant', metadataVariant);
+
+  uninstallPath := '';
+  uninstallVersion := '';
+  hasUninstall := OfficialUninstallRecord(Root, uninstallPath, uninstallVersion);
+
+  if hasMetadata or hasUninstall then begin
+    if hasMetadata and hasUninstall and
+       (metadataPath <> '') and (uninstallPath <> '') and
+       (CompareText(NormalizeInstallPath(metadataPath), NormalizeInstallPath(uninstallPath)) <> 0) then
+      InstallStateUnsafe := True;
+    if hasMetadata and hasUninstall and (metadataVersion <> '') and (uninstallVersion <> '') and
+       (CompareVersionSafe(metadataVersion, uninstallVersion) <> 0) then
+      InstallStateUnsafe := True;
+
+    if metadataPath = '' then metadataPath := uninstallPath;
+    if metadataVersion = '' then metadataVersion := uninstallVersion;
+    AddInstallCandidate(Root, Scope, metadataPath, metadataVersion, metadataVariant);
+  end;
+end;
+
+procedure DetectInstalledState();
+var
+  cmp: Integer;
+begin
+  InstallStateDetected := False;
+  InstallStateAmbiguous := False;
+  InstallStateUnsafe := False;
+  InstallMode := InstallModeFirst;
+  InstalledVersion := '';
+  InstalledPath := '';
+  InstalledVariant := '';
+  InstalledScope := '';
+  InstalledRegistryRoot := HKCU;
+  CandidateCount := 0;
+
+  ProbeInstallRecord(HKCU, 'CurrentUser');
+  ProbeInstallRecord(HKLM32, 'AllUsers/HKLM32');
+  if IsWin64 then
+    ProbeInstallRecord(HKLM64, 'AllUsers/HKLM64');
+
+  if CandidateCount = 0 then begin
+    Log('Install state: not installed');
+    exit;
+  end;
+
+  InstallStateDetected := True;
+  if CandidateCount <> 1 then begin
+    InstallStateAmbiguous := True;
+    InstallMode := InstallModeUnsafe;
+    Log('Install state: ambiguous candidates=' + IntToStr(CandidateCount));
+    exit;
+  end;
+
+  InstalledPath := CandidatePath[0];
+  InstalledVersion := CandidateVersion[0];
+  InstalledVariant := NormalizeOWorkHelperVariant(CandidateVariant[0]);
+  InstalledScope := CandidateScope[0];
+  InstalledRegistryRoot := CandidateRoot[0];
+
+  if (InstalledPath = '') or (not IsUsableVersion(InstalledVersion)) or (not DirExists(InstalledPath)) then begin
+    InstallStateUnsafe := True;
+    InstallMode := InstallModeUnsafe;
+    Log('Install state: record exists but path/version is invalid or missing. path=' +
+      InstalledPath + ', version=' + InstalledVersion);
+    exit;
+  end;
+
+  cmp := CompareVersionSafe(InstalledVersion, '{#InstallerVersion}');
+  if cmp < 0 then
+    InstallMode := InstallModeUpgrade
+  else if cmp = 0 then
+    InstallMode := InstallModeRepair
+  else
+    InstallMode := InstallModeDowngrade;
+
+  UpgradePathLocked := True;
+  Log('Install state: version=' + InstalledVersion + ', path=' + InstalledPath +
+    ', variant=' + InstalledVariant + ', scope=' + InstalledScope + ', mode=' + InstallMode);
+end;
+
+function InstallStateError(): String;
+begin
+  Result := '';
+  if InstallStateAmbiguous then
+    Result := '检测到多个 iWorkHelper 安装记录，无法安全确定应覆盖的安装目录。请先卸载多余记录后再运行安装器。'
+  else if InstallStateUnsafe then
+    Result := '检测到 iWorkHelper 安装记录与实际路径/版本不一致，已停止自动覆盖。请确认原安装完整，或先卸载后重新安装。'
+  else if InstallMode = InstallModeDowngrade then
+    Result := '检测到已安装版本 ' + InstalledVersion + ' 高于当前安装包 ' +
+      '{#InstallerVersion}，默认禁止降级。请使用不低于已安装版本的安装包，或先卸载后重新安装。';
+end;
+
+procedure LogInstallState();
+begin
+  if not InstallStateDetected then begin
+    Log('Install mode: first install; default directory will be used.');
+    exit;
+  end;
+  Log('Install mode=' + InstallMode + ', installed version=' + InstalledVersion +
+    ', path=' + InstalledPath + ', scope=' + InstalledScope +
+    ', OCR variant=' + InstalledVariant);
 end;
 
 function NormalizeArch(Value: String): String;
@@ -305,11 +608,6 @@ begin
   Log('VSTO Runtime detected=' + BoolText(Result) + ', status=' + VstoRuntimeStatus);
 end;
 
-function ShouldExtractVstoRedist(): Boolean;
-begin
-  Result := not VstoDetected;
-end;
-
 function InstallOrRepairVstoRuntime(): Boolean;
 var
   exitCode: Integer;
@@ -335,7 +633,7 @@ begin
   end;
 
   Log('VSTO Runtime installer exit code=' + IntToStr(exitCode));
-  if (exitCode <> 0) and (exitCode <> 3010) then begin
+  if (exitCode <> 0) and (exitCode <> 3010) and (exitCode <> 1641) then begin
     VstoRuntimeStatus := 'redist failed with exit code ' + IntToStr(exitCode);
     Result := False;
     exit;
@@ -343,6 +641,155 @@ begin
 
   VstoDetected := DetectVstoRuntime();
   Result := VstoDetected;
+end;
+
+function BackupManagedFile(RelativePath: String): Boolean;
+var
+  sourcePath, backupPath: String;
+begin
+  sourcePath := AddBackslash(InstalledPath) + RelativePath;
+  backupPath := AddBackslash(UpgradeBackupDir) + RelativePath;
+  if not FileExists(sourcePath) then begin
+    Log('Upgrade backup source missing: ' + sourcePath);
+    Result := False;
+    exit;
+  end;
+  ForceDirectories(ExtractFileDir(backupPath));
+  Result := CopyFile(sourcePath, backupPath, False);
+  if not Result then
+    Log('Upgrade backup copy failed: ' + sourcePath + ' -> ' + backupPath);
+end;
+
+function CaptureUpgradeBackup(): Boolean;
+var
+  key: String;
+begin
+  Result := True;
+  UpgradeBackupTaken := False;
+  if not InstallStateDetected then exit;
+  if (InstallMode <> InstallModeUpgrade) and (InstallMode <> InstallModeRepair) then exit;
+
+  UpgradeBackupDir := ExpandConstant('{tmp}\\iWorkHelper-upgrade-backup');
+  if DirExists(UpgradeBackupDir) then
+    DelTree(UpgradeBackupDir, True, True, True);
+  if not ForceDirectories(UpgradeBackupDir) then begin
+    Log('Cannot create upgrade backup directory: ' + UpgradeBackupDir);
+    Result := False;
+    exit;
+  end;
+
+  BackupMetadataPath := '';
+  BackupMetadataVersion := '';
+  BackupMetadataScope := '';
+  BackupMetadataComponents := '';
+  BackupMetadataVariant := '';
+  BackupMetadataOfficeArchitecture := '';
+  BackupMetadataOfficeArchitectureSource := '';
+  BackupMetadataOfficeVersion := '';
+  BackupMetadataEWorkHelperVersion := '';
+  BackupMetadataOWorkHelperVersion := '';
+  BackupMetadataTrustMode := '';
+  RegQueryStringValue(InstalledRegistryRoot, MetadataSubkey, 'InstallPath', BackupMetadataPath);
+  RegQueryStringValue(InstalledRegistryRoot, MetadataSubkey, 'InstallerVersion', BackupMetadataVersion);
+  RegQueryStringValue(InstalledRegistryRoot, MetadataSubkey, 'InstallScope', BackupMetadataScope);
+  RegQueryStringValue(InstalledRegistryRoot, MetadataSubkey, 'InstalledComponents', BackupMetadataComponents);
+  RegQueryStringValue(InstalledRegistryRoot, MetadataSubkey, 'OWorkHelperVariant', BackupMetadataVariant);
+  RegQueryStringValue(InstalledRegistryRoot, MetadataSubkey, 'OfficeArchitecture', BackupMetadataOfficeArchitecture);
+  RegQueryStringValue(InstalledRegistryRoot, MetadataSubkey, 'OfficeArchitectureSource', BackupMetadataOfficeArchitectureSource);
+  RegQueryStringValue(InstalledRegistryRoot, MetadataSubkey, 'OfficeVersion', BackupMetadataOfficeVersion);
+  RegQueryStringValue(InstalledRegistryRoot, MetadataSubkey, 'EWorkHelperVersion', BackupMetadataEWorkHelperVersion);
+  RegQueryStringValue(InstalledRegistryRoot, MetadataSubkey, 'OWorkHelperVersion', BackupMetadataOWorkHelperVersion);
+  RegQueryStringValue(InstalledRegistryRoot, MetadataSubkey, 'TrustMode', BackupMetadataTrustMode);
+
+  key := AddinRoot + '\\Excel\\Addins\\eWorkhelper';
+  BackupEManifestExists := RegQueryStringValue(InstalledRegistryRoot, key, 'Manifest', BackupEManifest);
+  BackupELoadBehavior := 0;
+  RegQueryDWordValue(InstalledRegistryRoot, key, 'LoadBehavior', BackupELoadBehavior);
+  key := AddinRoot + '\\Outlook\\Addins\\oWorkhelper';
+  BackupOManifestExists := RegQueryStringValue(InstalledRegistryRoot, key, 'Manifest', BackupOManifest);
+  BackupOLoadBehavior := 0;
+  RegQueryDWordValue(InstalledRegistryRoot, key, 'LoadBehavior', BackupOLoadBehavior);
+
+  if (Pos('eWorkHelper;', BackupMetadataComponents) > 0) or
+     DirExists(AddBackslash(InstalledPath) + 'eWorkHelper') then begin
+    Result := BackupManagedFile('eWorkHelper\\eWorkhelper.dll') and Result;
+    Result := BackupManagedFile('eWorkHelper\\eWorkhelper.dll.manifest') and Result;
+    Result := BackupManagedFile('eWorkHelper\\eWorkhelper.vsto') and Result;
+  end;
+  if (Pos('oWorkHelper;', BackupMetadataComponents) > 0) or
+     DirExists(AddBackslash(InstalledPath) + 'oWorkHelper') then begin
+    Result := BackupManagedFile('oWorkHelper\\oWorkhelper.dll') and Result;
+    Result := BackupManagedFile('oWorkHelper\\oWorkhelper.dll.manifest') and Result;
+    Result := BackupManagedFile('oWorkHelper\\oWorkhelper.vsto') and Result;
+  end;
+  if not Result then begin
+    Log('Upgrade backup incomplete; upgrade will be blocked.');
+    exit;
+  end;
+
+  { This is an in-process registry checkpoint. Inno Setup also performs its own
+    file rollback for failed installations; user data is outside the installation directory. }
+  UpgradeBackupTaken := True;
+  Log('Upgrade backup captured for registry root ' + RootName(InstalledRegistryRoot));
+end;
+
+procedure RestoreManagedFile(RelativePath: String);
+var
+  sourcePath, targetPath: String;
+begin
+  sourcePath := AddBackslash(UpgradeBackupDir) + RelativePath;
+  targetPath := AddBackslash(InstalledPath) + RelativePath;
+  if FileExists(sourcePath) then begin
+    DeleteFile(targetPath);
+    if not CopyFile(sourcePath, targetPath, False) then
+      Log('Warning: could not restore managed file: ' + targetPath);
+  end;
+end;
+
+procedure RestoreUpgradeBackup();
+var
+  key: String;
+begin
+  if (not UpgradeBackupTaken) or UpgradeCompleted then exit;
+  Log('Restoring registry checkpoint after unsuccessful upgrade.');
+
+  RegDeleteKeyIncludingSubkeys(InstalledRegistryRoot, MetadataSubkey);
+  if BackupMetadataPath <> '' then RegWriteStringValue(InstalledRegistryRoot, MetadataSubkey, 'InstallPath', BackupMetadataPath);
+  if BackupMetadataVersion <> '' then RegWriteStringValue(InstalledRegistryRoot, MetadataSubkey, 'InstallerVersion', BackupMetadataVersion);
+  if BackupMetadataScope <> '' then RegWriteStringValue(InstalledRegistryRoot, MetadataSubkey, 'InstallScope', BackupMetadataScope);
+  if BackupMetadataComponents <> '' then RegWriteStringValue(InstalledRegistryRoot, MetadataSubkey, 'InstalledComponents', BackupMetadataComponents);
+  if BackupMetadataVariant <> '' then RegWriteStringValue(InstalledRegistryRoot, MetadataSubkey, 'OWorkHelperVariant', BackupMetadataVariant);
+  if BackupMetadataOfficeArchitecture <> '' then RegWriteStringValue(InstalledRegistryRoot, MetadataSubkey, 'OfficeArchitecture', BackupMetadataOfficeArchitecture);
+  if BackupMetadataOfficeArchitectureSource <> '' then RegWriteStringValue(InstalledRegistryRoot, MetadataSubkey, 'OfficeArchitectureSource', BackupMetadataOfficeArchitectureSource);
+  if BackupMetadataOfficeVersion <> '' then RegWriteStringValue(InstalledRegistryRoot, MetadataSubkey, 'OfficeVersion', BackupMetadataOfficeVersion);
+  if BackupMetadataEWorkHelperVersion <> '' then RegWriteStringValue(InstalledRegistryRoot, MetadataSubkey, 'EWorkHelperVersion', BackupMetadataEWorkHelperVersion);
+  if BackupMetadataOWorkHelperVersion <> '' then RegWriteStringValue(InstalledRegistryRoot, MetadataSubkey, 'OWorkHelperVersion', BackupMetadataOWorkHelperVersion);
+  if BackupMetadataTrustMode <> '' then RegWriteStringValue(InstalledRegistryRoot, MetadataSubkey, 'TrustMode', BackupMetadataTrustMode);
+
+  key := AddinRoot + '\\Excel\\Addins\\eWorkhelper';
+  RegDeleteKeyIncludingSubkeys(InstalledRegistryRoot, key);
+  if BackupEManifestExists then begin
+    RegWriteStringValue(InstalledRegistryRoot, key, 'Manifest', BackupEManifest);
+    RegWriteDWordValue(InstalledRegistryRoot, key, 'LoadBehavior', BackupELoadBehavior);
+  end;
+  key := AddinRoot + '\\Outlook\\Addins\\oWorkhelper';
+  RegDeleteKeyIncludingSubkeys(InstalledRegistryRoot, key);
+  if BackupOManifestExists then begin
+    RegWriteStringValue(InstalledRegistryRoot, key, 'Manifest', BackupOManifest);
+    RegWriteDWordValue(InstalledRegistryRoot, key, 'LoadBehavior', BackupOLoadBehavior);
+  end;
+  if (Pos('eWorkHelper;', BackupMetadataComponents) > 0) or
+     DirExists(AddBackslash(InstalledPath) + 'eWorkHelper') then begin
+    RestoreManagedFile('eWorkHelper\\eWorkhelper.dll');
+    RestoreManagedFile('eWorkHelper\\eWorkhelper.dll.manifest');
+    RestoreManagedFile('eWorkHelper\\eWorkhelper.vsto');
+  end;
+  if (Pos('oWorkHelper;', BackupMetadataComponents) > 0) or
+     DirExists(AddBackslash(InstalledPath) + 'oWorkHelper') then begin
+    RestoreManagedFile('oWorkHelper\\oWorkhelper.dll');
+    RestoreManagedFile('oWorkHelper\\oWorkhelper.dll.manifest');
+    RestoreManagedFile('oWorkHelper\\oWorkhelper.vsto');
+  end;
 end;
 
 procedure DetectEnvironment();
@@ -368,9 +815,9 @@ function IsProcessRunning(FileName: String): Boolean;
 begin
   Result := False;
   if FileName = 'EXCEL.EXE' then
-    Result := FindWindow('XLMAIN', '') <> 0
+    Result := FindWindowW('XLMAIN', '') <> 0
   else if FileName = 'OUTLOOK.EXE' then
-    Result := FindWindow('rctrl_renwnd32', '') <> 0;
+    Result := FindWindowW('rctrl_renwnd32', '') <> 0;
   Log('Running window detection for ' + FileName + '=' + BoolText(Result));
 end;
 
@@ -439,6 +886,12 @@ end;
 
 procedure InitializeWizard();
 begin
+  DetectInstalledState();
+  LogInstallState();
+
+  if InstallStateDetected and (not InstallStateUnsafe) and (not InstallStateAmbiguous) then
+    WizardForm.DirEdit.Text := InstalledPath;
+
   OWorkHelperOcrPage := CreateInputOptionPage(
     wpSelectComponents,
     'oWorkHelper OCR 模式',
@@ -448,13 +901,66 @@ begin
     False);
   OWorkHelperOcrPage.Add('本地 + Baidu OCR');
   OWorkHelperOcrPage.Add('仅本地 OCR');
-  OWorkHelperOcrPage.SelectedValueIndex := 0;
+  if InstallStateDetected and (InstalledVariant = 'Local') then
+    OWorkHelperOcrPage.SelectedValueIndex := 1
+  else
+    OWorkHelperOcrPage.SelectedValueIndex := 0;
+end;
+
+function ValidateInstallState(): Boolean;
+var
+  currentPath: String;
+begin
+  Result := False;
+  if InstallStateUnsafe or InstallStateAmbiguous then begin
+    MsgBox(InstallStateError(), mbError, MB_OK);
+    exit;
+  end;
+  if InstallMode = InstallModeDowngrade then begin
+    MsgBox(InstallStateError(), mbError, MB_OK);
+    exit;
+  end;
+  if InstallStateDetected and UpgradePathLocked then begin
+    currentPath := NormalizeInstallPath(WizardForm.DirEdit.Text);
+    if CompareText(currentPath, InstalledPath) <> 0 then begin
+      MsgBox('升级/修复必须保留原安装路径：' + #13#10 + InstalledPath + #13#10#13#10 +
+        '安装器不支持安全迁移。若要更换路径，请先卸载后重新安装。', mbError, MB_OK);
+      exit;
+    end;
+  end;
+  Result := True;
+end;
+
+procedure ShowInstallStateMessage();
+var
+  message: String;
+begin
+  if InstallStateMessageShown then exit;
+  InstallStateMessageShown := True;
+  if not InstallStateDetected then exit;
+  if InstallMode = InstallModeUpgrade then
+    message := '检测到已安装版本 ' + InstalledVersion + '，将升级至 {#InstallerVersion}，安装路径保持不变：' + InstalledPath
+  else if InstallMode = InstallModeRepair then
+    message := '检测到已安装版本 ' + InstalledVersion + '，将执行修复/重新安装，安装路径保持不变：' + InstalledPath
+  else
+    message := InstallStateError();
+  if message <> '' then
+    MsgBox(message, mbInformation, MB_OK);
 end;
 
 function NextButtonClick(CurPageID: Integer): Boolean;
 begin
   Result := True;
+  if CurPageID = wpSelectDir then begin
+    Result := ValidateInstallState();
+    if not Result then exit;
+  end;
   if CurPageID = wpSelectComponents then begin
+    if not ValidateInstallState() then begin
+      Result := False;
+      exit;
+    end;
+    ShowInstallStateMessage();
     DetectEnvironment();
 
     if (not SelectedEWorkHelper()) and (not SelectedOWorkHelper()) then begin
@@ -482,7 +988,7 @@ begin
     end;
 
     if not DotNetDetected then begin
-      MsgBox('未检测到 .NET Framework 4.8。M2 安装器不会自动安装运行库，请先安装或启用后重试。', mbError, MB_OK);
+      MsgBox('未检测到 .NET Framework 4.8。安装程序不会自动安装 .NET Framework 运行时，请先安装或启用后重试。', mbError, MB_OK);
       Result := False;
       exit;
     end;
@@ -504,7 +1010,14 @@ begin
   Result := '';
   DetectEnvironment();
 
-  if (not SelectedEWorkHelper()) and (not SelectedOWorkHelper()) then
+  if not ValidateInstallState() then begin
+    Result := InstallStateError();
+    if Result = '' then
+      Result := '当前安装路径与已安装路径不一致。升级/修复不支持安全迁移，请先卸载后重新安装。';
+  end
+  else if InstallStateDetected and (RegistryRootForInstall() <> InstalledRegistryRoot) then
+    Result := '安装范围与原安装不一致，已停止自动升级以避免产生重复卸载记录。请使用原安装范围，或先卸载后重新安装。'
+  else if (not SelectedEWorkHelper()) and (not SelectedOWorkHelper()) then
     Result := '请至少选择一个要安装的插件。'
   else if SelectedEWorkHelper() and (not ExcelDetected) then
     Result := '未检测到受支持的 Microsoft Excel，不能安装 eWorkHelper。'
@@ -513,7 +1026,7 @@ begin
   else if OfficeArchitecture = OfficeArchUnknown then
     Result := '无法可靠识别 Office x86/x64 架构，已停止安装。请查看安装日志。'
   else if not DotNetDetected then
-    Result := '未检测到 .NET Framework 4.8。M2 安装器不会自动安装运行库，请先安装或启用后重试。'
+    Result := '未检测到 .NET Framework 4.8。安装程序不会自动安装 .NET Framework 运行时，请先安装或启用后重试。'
   else if not InstallOrRepairVstoRuntime() then
     Result := 'VSTO Runtime 缺失、版本不满足或安装损坏，且自动安装/修复失败。请查看安装日志。状态：' + VstoRuntimeStatus
   else if SelectedEWorkHelper() and IsProcessRunning('EXCEL.EXE') then
@@ -521,19 +1034,123 @@ begin
   else if SelectedOWorkHelper() and IsProcessRunning('OUTLOOK.EXE') then
     Result := 'OUTLOOK.EXE 正在运行。请关闭 Outlook 后重试。';
 
+  if Result = '' then
+    if not CaptureUpgradeBackup() then
+      Result := '无法创建升级恢复备份，已停止修改现有安装。请检查安装目录权限、磁盘空间，并关闭占用文件的 Office 进程。';
+
   if Result <> '' then
     Log('PrepareToInstall blocked: ' + Result);
 end;
 
+{ I-04: FileUri helpers.
+  The block between the BEGIN/END markers below is self-contained (it only depends on
+  ExpandConstant, StringChangeEx, Copy, Delete, Length and Ord) so it can be extracted
+  verbatim into an isolated Inno Setup test script for behaviour verification. }
+{ === BEGIN FILEURI HELPERS === }
+const
+  UriHexDigits = '0123456789ABCDEF';
+
+function UriIsHexDigit(Value: Char): Boolean;
+var
+  code: Integer;
+begin
+  code := Ord(Value);
+  Result := ((code >= 48) and (code <= 57)) or
+            ((code >= 65) and (code <= 70)) or
+            ((code >= 97) and (code <= 102));
+end;
+
+function UriIsUnreserved(Value: Char): Boolean;
+var
+  code: Integer;
+begin
+  code := Ord(Value);
+  Result := ((code >= 48) and (code <= 57)) or
+            ((code >= 65) and (code <= 90)) or
+            ((code >= 97) and (code <= 122)) or
+            (Value = '-') or (Value = '.') or (Value = '_') or (Value = '~');
+end;
+
+function UriEncodeByte(Value: Integer): String;
+begin
+  Result := '%' + Copy(UriHexDigits, (Value shr 4) + 1, 1) + Copy(UriHexDigits, (Value and $0F) + 1, 1);
+end;
+
+{ Percent-encodes one URI path: unreserved characters, '/' and ':' are kept as-is,
+  everything else (including space, '%', '#', '&', '+', '?' and all non-ASCII text,
+  which is emitted as UTF-8 bytes) becomes %XX. An already well-formed %XX escape in
+  the input is preserved verbatim instead of being double-encoded to %25XX. }
+function UriEncodePath(Value: String): String;
+var
+  i, code, nextCode: Integer;
+  encoded: String;
+begin
+  encoded := '';
+  i := 1;
+  while i <= Length(Value) do begin
+    code := Ord(Value[i]);
+
+    if code < $80 then begin
+      if UriIsUnreserved(Value[i]) or (Value[i] = '/') or (Value[i] = ':') then
+        encoded := encoded + Value[i]
+      else if (Value[i] = '%') and (i + 2 <= Length(Value)) and
+              UriIsHexDigit(Value[i + 1]) and UriIsHexDigit(Value[i + 2]) then begin
+        encoded := encoded + Copy(Value, i, 3);
+        i := i + 2;
+      end else
+        encoded := encoded + UriEncodeByte(code);
+    end else begin
+      if (code >= $D800) and (code <= $DBFF) and (i < Length(Value)) then begin
+        nextCode := Ord(Value[i + 1]);
+        if (nextCode >= $DC00) and (nextCode <= $DFFF) then begin
+          code := $10000 + ((code - $D800) shl 10) + (nextCode - $DC00);
+          i := i + 1;
+        end;
+      end;
+
+      if code < $800 then begin
+        encoded := encoded + UriEncodeByte($C0 or (code shr 6));
+        encoded := encoded + UriEncodeByte($80 or (code and $3F));
+      end else if code < $10000 then begin
+        encoded := encoded + UriEncodeByte($E0 or (code shr 12));
+        encoded := encoded + UriEncodeByte($80 or ((code shr 6) and $3F));
+        encoded := encoded + UriEncodeByte($80 or (code and $3F));
+      end else begin
+        encoded := encoded + UriEncodeByte($F0 or (code shr 18));
+        encoded := encoded + UriEncodeByte($80 or ((code shr 12) and $3F));
+        encoded := encoded + UriEncodeByte($80 or ((code shr 6) and $3F));
+        encoded := encoded + UriEncodeByte($80 or (code and $3F));
+      end;
+    end;
+
+    i := i + 1;
+  end;
+  Result := encoded;
+end;
+
+{ Local drive paths keep the file:///C:/... form; UNC paths are emitted as
+  file://server/share/... (never file://///server/share). }
 function FileUri(Path: String): String;
 var
   value: String;
+  isUnc: Boolean;
 begin
   value := ExpandConstant(Path);
   StringChangeEx(value, '\', '/', True);
-  StringChangeEx(value, ' ', '%20', True);
-  Result := 'file:///' + value + '|vstolocal';
+
+  isUnc := (Length(value) >= 2) and (value[1] = '/') and (value[2] = '/');
+  if isUnc then
+    while (Length(value) > 0) and (value[1] = '/') do
+      Delete(value, 1, 1);
+
+  value := UriEncodePath(value);
+
+  if isUnc then
+    Result := 'file://' + value + '|vstolocal'
+  else
+    Result := 'file:///' + value + '|vstolocal';
 end;
+{ === END FILEURI HELPERS === }
 
 function RegistryRootForInstall(): Integer;
 begin
@@ -642,11 +1259,56 @@ begin
       '{app}\oWorkHelper\oWorkhelper.dll.manifest');
 end;
 
+procedure DeleteAddinKey(Root: Integer; Host, AddinId: String);
+begin
+  RegDeleteKeyIncludingSubkeys(Root, AddinRoot + '\' + Host + '\Addins\' + AddinId);
+end;
+
 procedure DeleteAddinRoots(Root: Integer);
 begin
-  RegDeleteKeyIncludingSubkeys(Root, AddinRoot + '\Excel\Addins\eWorkhelper');
-  RegDeleteKeyIncludingSubkeys(Root, AddinRoot + '\Outlook\Addins\oWorkhelper');
+  DeleteAddinKey(Root, 'Excel', 'eWorkhelper');
+  DeleteAddinKey(Root, 'Outlook', 'oWorkhelper');
   RegDeleteKeyIncludingSubkeys(Root, MetadataSubkey);
+end;
+
+{ I-03: an upgrade that no longer selects a previously installed component must remove
+  that component's Office registration and its program directory, otherwise Office keeps
+  loading an add-in the user explicitly deselected. The shared metadata subkey is
+  deliberately NOT deleted here: this path only runs while at least one component is
+  still selected, so its metadata must survive. }
+procedure RemoveUnselectedComponentRegistration(Host, AddinId, ComponentName: String);
+begin
+  Log('Component ' + ComponentName + ' not selected: removing stale registration ' +
+    AddinRoot + '\' + Host + '\Addins\' + AddinId);
+  DeleteAddinKey(HKCU, Host, AddinId);
+  DeleteAddinKey(HKLM32, Host, AddinId);
+  if IsWin64 then
+    DeleteAddinKey(HKLM64, Host, AddinId);
+end;
+
+procedure RemoveUnselectedComponentFiles(SubDir, ComponentName: String);
+var
+  target: String;
+begin
+  target := ExpandConstant('{app}\' + SubDir);
+  if DirExists(target) then begin
+    Log('Component ' + ComponentName + ' not selected: removing stale files ' + target);
+    if not DelTree(target, True, True, True) then
+      Log('Warning: could not fully remove stale directory ' + target + ' (files may be in use).');
+  end;
+end;
+
+procedure CleanupUnselectedComponents();
+begin
+  if not SelectedEWorkHelper() then begin
+    RemoveUnselectedComponentRegistration('Excel', 'eWorkhelper', 'eWorkHelper');
+    RemoveUnselectedComponentFiles('eWorkHelper', 'eWorkHelper');
+  end;
+
+  if not SelectedOWorkHelper() then begin
+    RemoveUnselectedComponentRegistration('Outlook', 'oWorkhelper', 'oWorkHelper');
+    RemoveUnselectedComponentFiles('oWorkHelper', 'oWorkHelper');
+  end;
 end;
 
 function InitializeUninstall(): Boolean;
@@ -668,6 +1330,7 @@ procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssPostInstall then begin
     DetectEnvironment();
+    CleanupUnselectedComponents();
 
     if SelectedEWorkHelper() then
       RegisterAddin('eWorkHelper', 'Excel', 'eWorkhelper', 'eWorkHelper',
@@ -679,8 +1342,19 @@ begin
 
     WriteMetadata();
     VerifyInstall();
+    UpgradeCompleted := True;
+    if UpgradeBackupTaken and DirExists(UpgradeBackupDir) then begin
+      DelTree(UpgradeBackupDir, True, True, True);
+      UpgradeBackupTaken := False;
+    end;
     Log('Install verification passed.');
   end;
+end;
+
+procedure DeinitializeSetup();
+begin
+  if (not UpgradeCompleted) and UpgradeBackupTaken then
+    RestoreUpgradeBackup();
 end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
